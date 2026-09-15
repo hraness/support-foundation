@@ -51,6 +51,9 @@ function renderSupportOffer(offer) {
   return [
     `Optional: ${offer.valueProposition}`,
     ...offer.actions.map((action) => `${action.label}: ${action.url}`),
+    ...offer.emailSuggestion ? [
+      `Suggested email from Git: ${offer.emailSuggestion.email}. You can use it, change it, or skip updates.`
+    ] : [],
     "Payment is optional. Review any recurring price and confirm in your browser."
   ].join(`
 `) + `

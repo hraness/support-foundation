@@ -60,6 +60,34 @@ Ordinary commands make no support network requests. State failures suppress
 incidental invitations without changing the command result. Explicit support
 links remain available.
 
+### Convenient email suggestions
+
+When a Node offer includes product updates, the adapter can suggest the effective
+`git config --get user.email` from the current directory. Discovery happens only
+for an explicit offer or a due invitation, with a bounded local Git command.
+Missing Git, an unset or invalid email, and no-reply addresses simply leave the
+offer without a suggestion. Set `HRANESS_SUPPORT_EMAIL=off` or pass
+`gitEmail: false` to disable discovery; `cwd` selects the Git context.
+
+An available suggestion adds this optional field to the offer:
+
+```json
+{"emailSuggestion":{"email":"reader@example.com","source":"git-config","verified":false}}
+```
+
+Treat it as an editable convenience, not a verified account or consent. Offer
+use/change/skip. After the person selects an address, an agent with browser
+capabilities can open the returned clean updates link and fill its **Email
+address** field. If browser control is unavailable, give the link for manual
+entry. Submit only when the person has authorized signup or sending its
+confirmation; do not ask again when that authorization is already clear. The
+confirmation email still verifies the address before subscription.
+
+The address appears in that local offer output, which an agent host may include
+in its conversation. It is never added to links, preference state, telemetry or
+network requests by this package. The browser-safe root entry does not discover
+an email or read Git configuration.
+
 ## Agent behavior
 
 The agent-facing command returns a dedicated, versioned result. Integrations
@@ -83,7 +111,7 @@ remain available even after dismissal.
 The Node adapter stores only invitation preferences, timestamps and an opaque
 reservation under `$XDG_STATE_HOME/hraness/support`, or
 `~/.local/state/hraness/support`. Set `HRANESS_SUPPORT=off` to suppress incidental
-offers. There is no background telemetry, account discovery, cross-device
+offers. There is no background telemetry, account authentication, cross-device
 tracking or payment information. Browser and mobile preferences are a separate
 integration; local CLI state does not magically synchronize with them.
 

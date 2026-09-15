@@ -29,7 +29,7 @@ import { createSupportOffer } from '@hraness/support-foundation';
 import { runSupportCommand } from '@hraness/support-foundation/node';
 const profile = {id:'wrench',name:'Ghostget',valueProposition:'Support ongoing development.',updates:true};
 assert.equal(createSupportOffer(profile,'web').actions.length,2);
-const result = await runSupportCommand(profile,['--json'],{stateDirectory:${JSON.stringify(join(scratch, "preferences"))}});
+const result = await runSupportCommand(profile,['--json'],{stateDirectory:${JSON.stringify(join(scratch, "preferences"))},gitEmail:false});
 assert.equal(result.exitCode,0);
 assert.equal(JSON.parse(result.stdout).optional,true);
 `);

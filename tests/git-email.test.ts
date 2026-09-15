@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createSupportOffer } from "../src/index.js";
 import { maybeShowSupportInvitation, runSupportCommand, type SupportCommandOptions } from "../src/node.js";
 
@@ -45,11 +46,17 @@ async function direct(overrides: SupportCommandOptions = {}) {
   return JSON.parse(result.stdout);
 }
 
-async function fakeGit(body: string, interpreter = process.execPath) {
+async function fakeGit(mode: "count" | "stall") {
   const bin = join(directory, "bin");
   await mkdir(bin);
-  await writeFile(join(bin, "git"), `#!${interpreter}\n${body}\n`, { mode: 0o700 });
-  return { ...options, env: { ...env, PATH: bin } };
+  await copyFile(new URL("./fixtures/git-email.sh", import.meta.url), join(bin, "git"));
+  await chmod(join(bin, "git"), 0o700);
+  return { ...options, env: {
+    ...env, PATH: bin, SUPPORT_TEST_GIT_MODE: mode,
+    SUPPORT_TEST_GIT_LOG: join(directory, "reads.txt"), SUPPORT_TEST_GIT_EMAIL: email,
+    SUPPORT_TEST_RUNTIME: process.execPath,
+    SUPPORT_TEST_SCRIPT: fileURLToPath(new URL("./fixtures/git-email-stall.cjs", import.meta.url)),
+  } };
 }
 
 describe("local Git email suggestions", () => {
@@ -108,10 +115,7 @@ describe("local Git email suggestions", () => {
 
   test.skipIf(process.platform === "win32")("only an actual eligible offer invokes Git with fixed read-only arguments", async () => {
     const log = join(directory, "reads.txt");
-    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-    // A small shell fixture avoids making the production Git timeout depend on
-    // starting another full JS runtime under a busy test host.
-    const counted = await fakeGit(`printf '%s\\n' "$@" >> ${quote(log)}\nprintf '%s\\n' ${quote(email)}`, "/bin/sh");
+    const counted = await fakeGit("count");
     await runSupportCommand(profile, ["status", "--json"], counted);
     await runSupportCommand(profile, ["nonsense"], counted);
     await runSupportCommand({ ...profile, updates: false }, ["--json"], counted);
@@ -134,11 +138,10 @@ describe("local Git email suggestions", () => {
   });
 
   test.skipIf(process.platform === "win32")("a stalled or oversized Git result never prevents a plain offer", async () => {
-    const stalled = await fakeGit(`setTimeout(() => console.log(${JSON.stringify(email)}), 4000);`);
+    const stalled = await fakeGit("stall");
     const started = performance.now();
     expect((await direct(stalled)).emailSuggestion).toBeUndefined();
     expect(performance.now() - started).toBeLessThan(3000);
-    await writeFile(join(directory, "bin", "git"), `#!${process.execPath}\nconsole.log('a'.repeat(2048)+'@example.com');\n`, { mode: 0o700 });
-    expect((await direct(stalled)).emailSuggestion).toBeUndefined();
+    expect((await direct({ ...stalled, env: { ...stalled.env, SUPPORT_TEST_GIT_MODE: "oversize" } })).emailSuggestion).toBeUndefined();
   });
 });

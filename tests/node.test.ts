@@ -24,7 +24,7 @@ let options: SupportCommandOptions;
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "hraness-support-test-"));
-  options = { stateDirectory: join(directory, "state"), env: {}, now: NOW };
+  options = { stateDirectory: join(directory, "state"), env: {}, now: NOW, gitEmail: false };
 });
 
 afterEach(async () => {

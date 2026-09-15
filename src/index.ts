@@ -22,6 +22,8 @@ export type SupportOffer = Readonly<{
   product: Readonly<{ id: string; name: string }>;
   valueProposition: string;
   actions: readonly SupportAction[];
+  /** An editable local default, never evidence of identity or signup consent. */
+  emailSuggestion?: Readonly<{ email: string; source: "git-config"; verified: false }>;
 }>;
 
 const SOURCES: readonly SupportSource[] = ["cli", "agent", "web", "desktop", "skill"];
@@ -86,6 +88,9 @@ export function renderSupportOffer(offer: SupportOffer): string {
   return [
     `Optional: ${offer.valueProposition}`,
     ...offer.actions.map(action => `${action.label}: ${action.url}`),
+    ...(offer.emailSuggestion ? [
+      `Suggested email from Git: ${offer.emailSuggestion.email}. You can use it, change it, or skip updates.`,
+    ] : []),
     "Payment is optional. Review any recurring price and confirm in your browser.",
   ].join("\n") + "\n";
 }

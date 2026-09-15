@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { createSupportOffer, renderSupportOffer, type SupportProfile } from "./index.js";
+import { createSupportOffer, renderSupportOffer, type SupportOffer, type SupportProfile } from "./index.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1_000;
 const SNOOZE_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -17,6 +18,10 @@ export interface SupportCommandOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Epoch milliseconds; useful for deterministic hosts and tests. */
   readonly now?: number;
+  /** Directory whose effective Git configuration supplies the optional suggestion. */
+  readonly cwd?: string;
+  /** Disable local Git-email suggestions without disabling support invitations. */
+  readonly gitEmail?: boolean;
 }
 
 export interface SupportCommandResult {
@@ -109,6 +114,41 @@ function environmentSuppresses(options: SupportCommandOptions): boolean {
       const value = env[name]?.trim().toLowerCase();
       return value !== undefined && value !== "" && value !== "false" && value !== "0";
     });
+}
+
+/** Git configuration is only a convenient default; it does not verify ownership. */
+async function withGitEmailSuggestion(offer: SupportOffer, options: SupportCommandOptions): Promise<SupportOffer> {
+  const env = options.env ?? process.env;
+  if (!offer.actions.some(action => action.kind === "updates") || options.gitEmail === false
+    || ["off", "false", "0"].includes(env.HRANESS_SUPPORT_EMAIL?.trim().toLowerCase() ?? "")) return offer;
+  const email = await new Promise<string | null>((resolve) => {
+    execFile("git", ["config", "--get", "user.email"], {
+      cwd: options.cwd,
+      env,
+      encoding: "utf8",
+      timeout: 500,
+      killSignal: "SIGKILL",
+      maxBuffer: 1_024,
+      windowsHide: true,
+    }, (error, stdout) => {
+      if (error) { resolve(null); return; }
+      const candidate = stdout.trim();
+      const parts = candidate.split("@");
+      const local = parts[0] ?? "";
+      const domain = parts[1]?.toLowerCase() ?? "";
+      const valid = parts.length === 2 && candidate.length <= 254 && local.length <= 64
+        && /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$/u.test(local)
+        && !local.startsWith(".") && !local.endsWith(".") && !local.includes("..")
+        && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/u.test(domain)
+        && domain !== "noreply.github.com" && !domain.endsWith(".noreply.github.com")
+        && !/^(?:no-?reply|do-?not-?reply)$/iu.test(local);
+      resolve(valid ? candidate : null);
+    });
+  }).catch(() => null);
+  return email === null ? offer : Object.freeze({
+    ...offer,
+    emailSuggestion: Object.freeze({ email, source: "git-config" as const, verified: false as const }),
+  });
 }
 
 async function readState(path: string): Promise<SupportState> {
@@ -219,12 +259,12 @@ export async function runSupportCommand(
 ): Promise<SupportCommandResult> {
   try {
     const offer = createSupportOffer(profile, args[0] === "offer" ? "agent" : "cli");
-    if (args.length === 0) return { exitCode: 0, stdout: `${renderSupportOffer(offer).trimEnd()}\n`, stderr: "" };
-    if (args.length === 1 && args[0] === "--json") return success(offer);
+    if (args.length === 0) return { exitCode: 0, stdout: renderSupportOffer(await withGitEmailSuggestion(offer, options)), stderr: "" };
+    if (args.length === 1 && args[0] === "--json") return success(await withGitEmailSuggestion(offer, options));
     if (args.length === 2 && args[0] === "offer" && args[1] === "--json") {
       const claim = await claimInvitation(options);
       return success(claim.kind === "offer"
-        ? { schemaVersion: RESULT_SCHEMA, kind: "offer", invitation: { id: claim.id, ...offer } }
+        ? { schemaVersion: RESULT_SCHEMA, kind: "offer", invitation: { id: claim.id, ...await withGitEmailSuggestion(offer, options) } }
         : { schemaVersion: RESULT_SCHEMA, ...claim });
     }
     if (args.length === 2 && args[0] === "shown") {
@@ -274,9 +314,9 @@ export async function maybeShowSupportInvitation(
   if (!options.usefulResult || stderr.isTTY !== true || environmentSuppresses(options)) return false;
   try {
     const offer = createSupportOffer(profile, "cli");
-    const message = `${renderSupportOffer(offer).trimEnd()}\n`;
     const claim = await claimInvitation(options);
     if (claim.kind !== "offer") return false;
+    const message = renderSupportOffer(await withGitEmailSuggestion(offer, options));
     const acknowledged = await acknowledgeInvitation(claim.id, options);
     if (!acknowledged.ok || !acknowledged.value) return false;
     stderr.write(message);

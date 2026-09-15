@@ -51,6 +51,9 @@ function renderSupportOffer(offer) {
   return [
     `Optional: ${offer.valueProposition}`,
     ...offer.actions.map((action) => `${action.label}: ${action.url}`),
+    ...offer.emailSuggestion ? [
+      `Suggested email from Git: ${offer.emailSuggestion.email}. You can use it, change it, or skip updates.`
+    ] : [],
     "Payment is optional. Review any recurring price and confirm in your browser."
   ].join(`
 `) + `
@@ -59,6 +62,7 @@ function renderSupportOffer(offer) {
 
 // src/node.ts
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -111,6 +115,37 @@ function environmentSuppresses(options) {
   return ["CI", "CONTINUOUS_INTEGRATION", "GITHUB_ACTIONS", "TF_BUILD", "BUILD_NUMBER", "TEAMCITY_VERSION", "JENKINS_URL"].some((name) => {
     const value = env[name]?.trim().toLowerCase();
     return value !== undefined && value !== "" && value !== "false" && value !== "0";
+  });
+}
+async function withGitEmailSuggestion(offer, options) {
+  const env = options.env ?? process.env;
+  if (!offer.actions.some((action) => action.kind === "updates") || options.gitEmail === false || ["off", "false", "0"].includes(env.HRANESS_SUPPORT_EMAIL?.trim().toLowerCase() ?? ""))
+    return offer;
+  const email = await new Promise((resolve) => {
+    execFile("git", ["config", "--get", "user.email"], {
+      cwd: options.cwd,
+      env,
+      encoding: "utf8",
+      timeout: 500,
+      killSignal: "SIGKILL",
+      maxBuffer: 1024,
+      windowsHide: true
+    }, (error, stdout) => {
+      if (error) {
+        resolve(null);
+        return;
+      }
+      const candidate = stdout.trim();
+      const parts = candidate.split("@");
+      const local = parts[0] ?? "";
+      const domain = parts[1]?.toLowerCase() ?? "";
+      const valid = parts.length === 2 && candidate.length <= 254 && local.length <= 64 && /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$/u.test(local) && !local.startsWith(".") && !local.endsWith(".") && !local.includes("..") && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/u.test(domain) && domain !== "noreply.github.com" && !domain.endsWith(".noreply.github.com") && !/^(?:no-?reply|do-?not-?reply)$/iu.test(local);
+      resolve(valid ? candidate : null);
+    });
+  }).catch(() => null);
+  return email === null ? offer : Object.freeze({
+    ...offer,
+    emailSuggestion: Object.freeze({ email, source: "git-config", verified: false })
   });
 }
 async function readState(path) {
@@ -221,13 +256,12 @@ async function runSupportCommand(profile, args = [], options = {}) {
   try {
     const offer = createSupportOffer(profile, args[0] === "offer" ? "agent" : "cli");
     if (args.length === 0)
-      return { exitCode: 0, stdout: `${renderSupportOffer(offer).trimEnd()}
-`, stderr: "" };
+      return { exitCode: 0, stdout: renderSupportOffer(await withGitEmailSuggestion(offer, options)), stderr: "" };
     if (args.length === 1 && args[0] === "--json")
-      return success(offer);
+      return success(await withGitEmailSuggestion(offer, options));
     if (args.length === 2 && args[0] === "offer" && args[1] === "--json") {
       const claim = await claimInvitation(options);
-      return success(claim.kind === "offer" ? { schemaVersion: RESULT_SCHEMA, kind: "offer", invitation: { id: claim.id, ...offer } } : { schemaVersion: RESULT_SCHEMA, ...claim });
+      return success(claim.kind === "offer" ? { schemaVersion: RESULT_SCHEMA, kind: "offer", invitation: { id: claim.id, ...await withGitEmailSuggestion(offer, options) } } : { schemaVersion: RESULT_SCHEMA, ...claim });
     }
     if (args.length === 2 && args[0] === "shown") {
       if (!UUID.test(args[1] ?? ""))
@@ -280,11 +314,10 @@ async function maybeShowSupportInvitation(profile, options) {
     return false;
   try {
     const offer = createSupportOffer(profile, "cli");
-    const message = `${renderSupportOffer(offer).trimEnd()}
-`;
     const claim = await claimInvitation(options);
     if (claim.kind !== "offer")
       return false;
+    const message = renderSupportOffer(await withGitEmailSuggestion(offer, options));
     const acknowledged = await acknowledgeInvitation(claim.id, options);
     if (!acknowledged.ok || !acknowledged.value)
       return false;

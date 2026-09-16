@@ -34,6 +34,16 @@ describe("public support handoff", () => {
     }
     expect(() => createSupportOffer(profile, "email" as SupportSource)).toThrow(TypeError);
   });
+  test("preserves Unicode control, format, and separator rejection across presentation fields", () => {
+    for (const character of ["\u0000", "\u001b", "\u007f", "\u009f", "\u00ad", "\u061c", "\u200b", "\u202e", "\u2066", "\ufeff", "\u{e0001}", "\u2028", "\u2029"]) {
+      for (const field of ["name", "valueProposition"] as const) {
+        expect(parseSupportProfile({ ...profile, [field]: `Before${character}after` })).toBeNull();
+      }
+    }
+    for (const name of ["Café", "Cafe\u0301", "研究", "Tools 🛠"]) {
+      expect(parseSupportProfile({ ...profile, name })?.name).toBe(name);
+    }
+  });
   test("every accepted bounded product/source stays on the single Accounts origin", () => {
     for (const source of ["cli", "agent", "web", "desktop", "skill"] as const) {
       for (let length = 1; length <= 48; length++) {

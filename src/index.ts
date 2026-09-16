@@ -33,7 +33,9 @@ export interface SupportProtocolOptions {
 
 const SOURCES: readonly SupportSource[] = ["cli", "agent", "web", "desktop", "skill"];
 const ACCOUNT_ORIGIN = "https://account.hraness.com";
-const UNSAFE_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+// Evaluate Unicode properties in the runtime. Some downstream Babel bundles
+// omit the property tables needed to rewrite a regular-expression literal.
+const UNSAFE_TEXT = new RegExp("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "u");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

@@ -1,6 +1,6 @@
 {
   "name": "@hraness/support-foundation",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Optional product-update and support invitations with human checkout handoffs and shared local preferences.",
   "license": "MIT",
   "type": "module",

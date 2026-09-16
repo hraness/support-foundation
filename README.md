@@ -40,21 +40,39 @@ Import `runSupportCommand` and `maybeShowSupportInvitation` from
 `@hraness/support-foundation/node`. Route arguments following the product's
 `support` command to `runSupportCommand(profile, args)`, then write its
 `stdout`, `stderr`, and `exitCode` through the product's normal output adapter.
+Pass `{ command: ["ghostget"] }` (or the product's executable and fixed prefix
+arguments) to both adapters. These are argv elements, never shell text. The
+Accounts product ID cannot identify an executable: Ghostget uses `wrench` there.
 
 | Arguments after `support` | Behavior |
 | --- | --- |
 | None, or `--json` | Show an explicitly requested offer without checking or changing cadence |
+| `protocol --json` | Return the portable lifecycle contract without state, Git, or network effects |
 | `offer --json` | Reserve a due agent invitation, or return `kind: "quiet"` |
-| `shown <id>` | Record presentation of that reserved invitation |
+| `shown <id>` | Record agent/host-reported output after presentation; an identical retry never extends cooldown |
+| `release <id>` | Cancel only that exact unpresented reservation |
 | `dismiss` | Stop incidental invitations across participating tools on this device |
 | `snooze` | Pause invitations for 30 days |
 | `enable` | Re-enable invitations |
 | `status --json` | Read the local invitation preference |
 
-Call `maybeShowSupportInvitation(profile, { usefulResult: true })` only after
-a command has completed useful work successfully. It writes to interactive
-stderr. The integrating product must exclude help, version, errors, probes,
-JSON/raw output, quiet modes, nested tool calls and unattended tasks.
+Call `maybeShowSupportInvitation(profile, { command: ["ghostget"], usefulResult:
+true })` only after a command has completed useful work successfully. Unknown
+callers, including PTYs and piped/JSON commands, receive a compact versioned
+discovery notice on stderr. Stdout stays unchanged. A notice contains the
+protocol command, does not discover email or reserve an invitation, and never
+consumes the weekly presentation window. Its shared attempt throttle is ten
+minutes. Root help and public agent documentation should also expose the
+protocol command so discovery works without an installed product skill.
+
+Set `audience: "human"` or `HRANESS_SUPPORT_AUDIENCE=human` for a direct human
+invitation on interactive stderr. `agent` selects discovery, and `off` suppresses
+incidental output and skill offer claims. Unknown role values fail quiet. The
+explicit host option overrides the audience environment variable; CI and
+`HRANESS_SUPPORT=off` always suppress incidental work. Explicit support and
+protocol requests remain available. A TTY alone never establishes a human.
+The integrating product must exclude help, version, errors, probes, quiet
+modes, embedded/SDK execution, nested tool calls, and unattended tasks.
 
 Ordinary commands make no support network requests. State failures suppress
 incidental invitations without changing the command result. Explicit support
@@ -91,9 +109,22 @@ an email or read Git configuration.
 ## Agent behavior
 
 The agent-facing command returns a dedicated, versioned result. Integrations
-must preserve the existing JSON schema of ordinary commands. Product skills
-can check for an offer once after completing a useful task, include one short
-optional invitation, and acknowledge presentation using its opaque ID.
+must preserve the existing JSON schema of ordinary commands. An agent can read
+`support protocol --json` without a skill. The portable
+`createSupportProtocol(profile, { command: ["ghostget"] })` export supplies the
+same versioned data, including explicit command arrays, decision guidance,
+value proposition, clean links, and signup/payment handoff. Replace only its
+documented `{invitationId}` placeholder with a returned ID; never execute an
+argv array as shell text.
+
+Check for an offer once after completing useful work. Surface one brief optional
+invitation in a persistent human-facing message or card, then acknowledge with
+`shown <id>`. Temporary or collapsed progress commentary does not qualify. If
+the final answer is the only persistent surface and tools must precede it, put
+the invitation in that answer and leave its reservation unacknowledged. The
+reservation expires after ten minutes, so a later task may offer again; no
+weekly receipt is established in that fallback. Release a canceled, unshown
+invitation once; do not reacquire it in the same task.
 
 This is guidance for cooperating product skills. A tool response cannot force
 an external agent to advertise or override its user. Respect a user's request
@@ -103,17 +134,37 @@ payment confirmation to the person. See [agent integration](docs/agents.md).
 ## Cadence and privacy
 
 The default is one invitation after the first eligible useful result, then
-at most once every seven days across participating tools on the same device.
+at most once every seven days after an acknowledged presentation across
+participating tools on the same device. Hosts unable to acknowledge persistent
+output use the ten-minute reservation fallback described above.
 A short reservation prevents concurrent tools from making duplicate offers.
 Dismissal is persistent; later means a 30-day snooze. Explicit support requests
 remain available even after dismissal.
 
-The Node adapter stores only invitation preferences, timestamps and an opaque
-reservation under `$XDG_STATE_HOME/hraness/support`, or
+The Node adapter stores only invitation preferences, timestamps and opaque
+invitation IDs under `$XDG_STATE_HOME/hraness/support`, or
 `~/.local/state/hraness/support`. Set `HRANESS_SUPPORT=off` to suppress incidental
 offers. There is no background telemetry, account authentication, cross-device
 tracking or payment information. Browser and mobile preferences are a separate
 integration; local CLI state does not magically synchronize with them.
+
+The existing strict `state.json` v1 schema remains unchanged. Separate bounded
+`discovery.json` and `presentation.json` sidecars share its nonblocking lock, so
+older clients keep using the same dismissal, snooze, reservation, and cooldown.
+Older clients do not implement discovery or idempotent acknowledgment and must
+be upgraded for the new presentation-order contract. A retry is valid only when
+its requested ID matches the receipt and the receipt timestamp matches committed
+state; stale IDs cannot affect a newer reservation. Malformed or unavailable state is preserved and suppresses
+incidental work, never reset silently.
+
+Presentation means the host or agent reports output, not that a person read it
+or consented. Human-mode output is revalidated under the preference lock after
+email discovery, then written before its receipt is committed. Output waits are
+capped at 500 ms; asynchronous errors and rejected sinks earn no weekly
+cooldown. An unresolved sink admits no further write until it settles. A crash
+or storage failure after output can leave only the ten-minute reservation, so
+a later task may repeat an invitation. No cross-process human-display proof or
+exactly-once guarantee is claimed.
 
 ## Other media
 

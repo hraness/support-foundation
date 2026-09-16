@@ -83,7 +83,7 @@ describe("local Git email suggestions", () => {
     expect(state).not.toContain("email");
     const writes: string[] = [];
     expect(await maybeShowSupportInvitation(profile, {
-      ...options, stateDirectory: join(directory, "terminal-state"), usefulResult: true,
+      ...options, stateDirectory: join(directory, "terminal-state"), usefulResult: true, audience: "human",
       stderr: { isTTY: true, write(value) { writes.push(value); } },
     })).toBe(true);
     expect(writes).toHaveLength(1);
@@ -143,5 +143,26 @@ describe("local Git email suggestions", () => {
     expect((await direct(stalled)).emailSuggestion).toBeUndefined();
     expect(performance.now() - started).toBeLessThan(3000);
     expect((await direct({ ...stalled, env: { ...stalled.env, SUPPORT_TEST_GIT_MODE: "oversize" } })).emailSuggestion).toBeUndefined();
+  });
+
+  test.skipIf(process.platform === "win32")("a successful dismissal during Git discovery invalidates the pending human invitation", async () => {
+    const stalled = await fakeGit("stall");
+    let writes = 0;
+    const pending = maybeShowSupportInvitation(profile, { ...stalled, usefulResult: true, audience: "human",
+      stderr: { isTTY: true, write() { writes += 1; } },
+    });
+    let reserved = false;
+    for (let index = 0; index < 50; index++) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      const result = await runSupportCommand(profile, ["status", "--json"], options);
+      if (result.exitCode === 0 && JSON.parse(result.stdout).reservationExpiresAt !== null) { reserved = true; break; }
+    }
+    expect(reserved).toBe(true);
+    expect((await runSupportCommand(profile, ["dismiss"], options)).exitCode).toBe(0);
+    expect(await pending).toBe(false);
+    expect(writes).toBe(0);
+    const state = JSON.parse(await readFile(join(options.stateDirectory!, "state.json"), "utf8"));
+    expect(state.optedOut).toBe(true);
+    expect(state.lastShownAt).toBeNull();
   });
 });

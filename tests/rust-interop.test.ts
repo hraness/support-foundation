@@ -151,6 +151,10 @@ describe("Rust and JavaScript published contract interoperability", () => {
     const marker = join(bin, "called"); const git = join(bin, "git");
     await writeFile(git, `#!/bin/sh\nprintf called > '${marker}'\nprintf '%s\\n' 'Person+tool@Example.com'\n`); await chmod(git, 0o755);
     const env = { PATH:bin };
+    // Admit this newly created executable to the host before testing the
+    // 500 ms lookup. Cold executable security scans can exceed that deadline;
+    // production intentionally returns a plain offer in that case.
+    expect(Bun.spawnSync([git, "config", "--get", "user.email"], { env, timeout:2000 }).exitCode).toBe(0);
     const updates = { ...profile, updates:true };
     const result = await body(rust, await directory(), ["--json"], { env, profile:updates, gitEmail:true });
     expect(result.emailSuggestion).toEqual({ email:"Person+tool@Example.com", source:"git-config", verified:false });

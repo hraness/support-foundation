@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,24 @@ try {
   const installed = join(scratch, "node_modules", "@hraness", "support-foundation");
   await mkdir(installed, { recursive: true });
   run("tar", ["-xzf", archive, "--strip-components=1", "-C", installed], scratch);
+  // Compile a detached strict consumer with the same NODE_ENV augmentation
+  // used by Next.js. Dependency implementations must not be re-typechecked
+  // under the consumer's ambient declarations; only emitted .d.ts are public.
+  await cp(join(root, "node_modules/@types/node"), join(scratch, "node_modules/@types/node"), { recursive: true, dereference: true });
+  await cp(join(root, "node_modules/undici-types"), join(scratch, "node_modules/undici-types"), { recursive: true, dereference: true });
+  await writeFile(join(scratch, "package.json"), JSON.stringify({ private:true, type:"module" }));
+  await writeFile(join(scratch, "consumer.ts"), `
+import { createSupportOffer, createSupportProtocol, type SupportProfile } from '@hraness/support-foundation';
+import { runSupportCommand, maybeShowSupportInvitation } from '@hraness/support-foundation/node';
+declare global { namespace NodeJS { interface ProcessEnv { readonly NODE_ENV: 'development' | 'production' | 'test'; } } }
+const profile: SupportProfile = {id:'wrench',name:'Ghostget',valueProposition:'Support development.',updates:true};
+createSupportOffer(profile,'web');
+createSupportProtocol(profile,{command:['ghostget']});
+runSupportCommand(profile,['protocol','--json'],{command:['ghostget'],env:{}});
+maybeShowSupportInvitation(profile,{command:['ghostget'],usefulResult:true,env:{}});
+`);
+  await writeFile(join(scratch, "tsconfig.json"), JSON.stringify({ compilerOptions:{ target:"ES2022", module:"NodeNext", moduleResolution:"NodeNext", strict:true, skipLibCheck:false, noEmit:true, types:["node"] }, include:["consumer.ts"] }));
+  run("node", [join(root, "node_modules/typescript/bin/tsc"), "--project", join(scratch, "tsconfig.json")], scratch);
   const entry = join(scratch, "consumer.mjs");
   await writeFile(entry, `
 import assert from 'node:assert/strict';
@@ -67,7 +85,9 @@ process.stdout.write(JSON.stringify({shown,lastShownAt:state.lastShownAt}));
   if (!browser.success) throw new Error("Root must remain browser portable.");
   const manifest = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
   if (Object.keys(manifest.dependencies ?? {}).length !== 0) throw new Error("Unexpected runtime dependency.");
-  process.stdout.write("Packed Node consumer and browser-safe root passed.\n");
+  assert.equal(manifest.exports["."].types, "./dist/index.d.ts");
+  assert.equal(manifest.exports["./node"].types, "./dist/node.d.ts");
+  process.stdout.write("Packed strict TypeScript/Node consumers and browser-safe root passed.\n");
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }

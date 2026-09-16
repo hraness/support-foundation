@@ -195,5 +195,7 @@ gate. Installed JavaScript consumers do not require a Rust toolchain.
 The gate checks TypeScript, Rust formatting/Clippy/tests, generated contract
 equality, JavaScript/Rust state interoperability, URL and state invariants, concurrent invitations,
 preferences and dedicated command behavior, then verifies the built package
-under Node and its browser-safe root. These local tests make no provider calls
+under Node, a detached strict TypeScript consumer with an augmented `NODE_ENV`,
+and its browser-safe root. Public type exports are generated declarations.
+These local tests make no provider calls
 and do not prove that a deployed Accounts route or Stripe configuration is live.

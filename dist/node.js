@@ -1,7 +1,7 @@
 // src/index.ts
 var SOURCES = ["cli", "agent", "web", "desktop", "skill"];
 var ACCOUNT_ORIGIN = "https://account.hraness.com";
-var UNSAFE_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+var UNSAFE_TEXT = new RegExp("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "u");
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

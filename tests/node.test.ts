@@ -100,7 +100,8 @@ describe("suite-wide presentation receipts", () => {
     const status = JSON.parse((await command(["status", "--json"])).stdout);
     expect(status.lastShownAt).toBeNull();
     expect((await command(["shown", first.invitation.id])).exitCode).toBe(0);
-    expect((await command(["shown", first.invitation.id])).exitCode).toBe(2);
+    expect((await command(["shown", first.invitation.id], { now: NOW + 5_000 })).exitCode).toBe(0);
+    expect(JSON.parse((await command(["status", "--json"])).stdout).lastShownAt).toBe(NOW);
   });
 
   test("concurrent products reserve at most one invitation", async () => {
@@ -225,48 +226,51 @@ describe("post-success terminal hook", () => {
   test("only useful interactive work prints; shared cooldown prevents another product printing", async () => {
     const writes: string[] = [];
     const stderr = { isTTY: true, write(text: string) { writes.push(text); } };
-    expect(await maybeShowSupportInvitation(profile, { ...options, usefulResult: false, stderr })).toBe(false);
-    expect(await maybeShowSupportInvitation(profile, { ...options, usefulResult: true, stderr: { ...stderr, isTTY: false } })).toBe(false);
-    expect(await maybeShowSupportInvitation(profile, { ...options, usefulResult: true, env: { CI: "1" }, stderr })).toBe(false);
+    expect(await maybeShowSupportInvitation(profile, { ...options, audience: "human", usefulResult: false, stderr })).toBe(false);
+    expect(await maybeShowSupportInvitation(profile, { ...options, audience: "human", usefulResult: true, stderr: { ...stderr, isTTY: false } })).toBe(false);
+    expect(await maybeShowSupportInvitation(profile, { ...options, audience: "human", usefulResult: true, env: { CI: "1" }, stderr })).toBe(false);
     expect(writes).toHaveLength(0);
-    expect(await maybeShowSupportInvitation(profile, { ...options, usefulResult: true, stderr })).toBe(true);
+    expect(await maybeShowSupportInvitation(profile, { ...options, audience: "human", usefulResult: true, stderr })).toBe(true);
     expect(writes).toHaveLength(1);
     expect(writes[0]).toContain("source=cli#support");
-    expect(await maybeShowSupportInvitation(otherProfile, { ...options, usefulResult: true, stderr })).toBe(false);
+    expect(await maybeShowSupportInvitation(otherProfile, { ...options, audience: "human", usefulResult: true, stderr })).toBe(false);
     expect(writes).toHaveLength(1);
     expect(JSON.parse((await command(["status", "--json"])).stdout).lastShownAt).toBe(NOW);
   });
 
   test("write failures and invalid profiles never fail the host operation", async () => {
-    expect(await maybeShowSupportInvitation(profile, { ...options, usefulResult: true, stderr: { isTTY: true, write() { throw new Error("closed"); } } })).toBe(false);
-    expect(JSON.parse((await command(["status", "--json"])).stdout).lastShownAt).toBe(NOW);
-    expect(await maybeShowSupportInvitation({ ...profile, name: "bad\u001b[31m" }, { ...options, usefulResult: true, stderr: { isTTY: true, write() {} } })).toBe(false);
+    expect(await maybeShowSupportInvitation(profile, { ...options, audience: "human", usefulResult: true, stderr: { isTTY: true, write() { throw new Error("closed"); } } })).toBe(false);
+    expect(JSON.parse((await command(["status", "--json"])).stdout).lastShownAt).toBeNull();
+    expect(await maybeShowSupportInvitation({ ...profile, name: "bad\u001b[31m" }, { ...options, audience: "human", usefulResult: true, stderr: { isTTY: true, write() {} } })).toBe(false);
   });
 
-  test("a terminal notice is printed only after its cooldown is committed", async () => {
+  test("a terminal notice is output before its reported presentation starts cooldown", async () => {
     let printed = false;
     expect(await maybeShowSupportInvitation(profile, {
       ...options,
+      audience: "human",
       usefulResult: true,
       stderr: {
         isTTY: true,
         write() {
           const state = JSON.parse(readFileSync(join(options.stateDirectory!, "state.json"), "utf8"));
-          expect(state.lastShownAt).toBe(NOW);
-          expect(state.reservation).toBeNull();
+          expect(state.lastShownAt).toBeNull();
+          expect(state.reservation).not.toBeNull();
           printed = true;
         },
       },
     })).toBe(true);
     expect(printed).toBe(true);
+    expect(JSON.parse((await command(["status", "--json"])).stdout).lastShownAt).toBe(NOW);
   });
 
-  test("a competing lock between reservation and acknowledgment suppresses terminal output", async () => {
+  test("a competing lock before presentation leaves a short reservation and suppresses output", async () => {
     let clockReads = 0;
     let printed = false;
     const lockPath = join(options.stateDirectory!, "state.lock");
     const shown = await maybeShowSupportInvitation(profile, {
       ...options,
+      audience: "human",
       // The second clock read is the acknowledgment boundary. Simulate an
       // independent process holding the lock after reservation has completed.
       get now() {

@@ -26,6 +26,11 @@ export type SupportOffer = Readonly<{
   emailSuggestion?: Readonly<{ email: string; source: "git-config"; verified: false }>;
 }>;
 
+export interface SupportProtocolOptions {
+  /** Product-owned executable and fixed prefix arguments, before `support`. Never shell text. */
+  readonly command: readonly string[];
+}
+
 const SOURCES: readonly SupportSource[] = ["cli", "agent", "web", "desktop", "skill"];
 const ACCOUNT_ORIGIN = "https://account.hraness.com";
 const UNSAFE_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
@@ -93,4 +98,45 @@ export function renderSupportOffer(offer: SupportOffer): string {
     ] : []),
     "Payment is optional. Review any recurring price and confirm in your browser.",
   ].join("\n") + "\n";
+}
+
+/** Portable, local guidance. Reading this contract neither claims nor presents an offer. */
+export function createSupportProtocol(profile: SupportProfile, options: SupportProtocolOptions) {
+  const command = options.command;
+  if (!Array.isArray(command) || command.length < 1 || command.length > 8
+    || !Array.from(command).every(part => plainText(part, 240))) {
+    throw new TypeError("Invalid support command prefix.");
+  }
+  const argv = (...args: string[]) => Object.freeze([...command, "support", ...args]);
+  return Object.freeze({
+    schemaVersion: "hraness-support-protocol-v1" as const,
+    optional: true as const,
+    offer: createSupportOffer(profile, "agent"),
+    commands: Object.freeze({
+      protocol: argv("protocol", "--json"),
+      offer: argv("offer", "--json"),
+      shown: argv("shown", "{invitationId}"),
+      release: argv("release", "{invitationId}"),
+      status: argv("status", "--json"),
+      dismiss: argv("dismiss"),
+      snooze: argv("snooze"),
+      enable: argv("enable"),
+    }),
+    invitationIdPlaceholder: "{invitationId}",
+    lifecycle: Object.freeze({
+      eligibility: "Check once after useful successful work with a human-facing closeout. Skip when the person requests no promotions, or the task is unattended or failed.",
+      claim: "Run the offer argv once. An offer reserves presentation for ten minutes; quiet requires no mention. Do not poll during a tool loop.",
+      presentation: "Show one brief optional invitation with the returned value proposition and links on a persistent human-facing message or card, respecting the person's preferences. After that output, run shown with the returned invitation ID.",
+      acknowledgement: "Shown records agent/host-reported persistent output, not proof the human read it or consented. A duplicate acknowledgement does not extend the weekly cooldown; that cooldown requires an acknowledged presentation.",
+      toolOrdering: "Never acknowledge temporary or collapsed progress commentary as the persistent invitation. If the final answer is the only persistent surface and tools must precede it, include the invitation in the final answer and leave its reservation unacknowledged. Without post-output acknowledgement the reservation expires after ten minutes and a later task may offer again; never invent a weekly receipt.",
+      cancellation: "For an unshown invitation, release its ID once. Do not reacquire it in the same task.",
+      failures: "Support and storage failures never change the useful task result. Do not repeat an invitation after an uncertain output or acknowledgement.",
+    }),
+    handoff: Object.freeze({
+      emailSuggestion: "Only a returned Git-config suggestion may be offered automatically. It is unverified and editable; offer use, change, or skip. Never search other accounts for an address.",
+      addressSelection: "Selecting an address permits browser prefilling only. Open the returned updates URL unchanged and fill Email address through normal browser input; without browser capability provide the clean link for manual entry.",
+      signup: "Submit only after an explicit signup or confirmation-email request, without asking again when authorized. Inbox confirmation is still required; a sent email is not an active subscription.",
+      payment: "The person reviews current terms and confirms payment in their browser. Never sign up, send mail, authenticate, or purchase in the background.",
+    }),
+  });
 }

@@ -2,7 +2,7 @@
 
 `@hraness/support-foundation` gives products a shared way to offer free product
 updates and optional paid support. A portable offer links to a human Accounts
-page; a Node adapter controls terminal and agent invitations with one local
+page; Node and Rust adapters control terminal and agent invitations with one local
 cooldown and a persistent opt-out across participating tools.
 
 The package never opens a browser, authenticates, sends email, or creates a
@@ -35,6 +35,10 @@ rejects malformed data and terminal control characters; accepting a profile
 does not register it with Accounts. Render labels as text in web and native UI.
 
 ## Connect a CLI
+
+Rust products use the repository's `hraness-support-foundation` Cargo crate;
+see the [Rust integration guide](docs/rust.md). It shares the Node adapter's
+protocol and on-device preferences without requiring a JavaScript runtime.
 
 Import `runSupportCommand` and `maybeShowSupportInvitation` from
 `@hraness/support-foundation/node`. Route arguments following the product's
@@ -185,7 +189,13 @@ bun install --frozen-lockfile --ignore-scripts
 bun run check
 ```
 
-The gate checks TypeScript, URL and state invariants, concurrent invitations,
+Install Rust 1.97.1 with its rustfmt and Clippy components for the development
+gate. Installed JavaScript consumers do not require a Rust toolchain.
+
+The gate checks TypeScript, Rust formatting/Clippy/tests, generated contract
+equality, JavaScript/Rust state interoperability, URL and state invariants, concurrent invitations,
 preferences and dedicated command behavior, then verifies the built package
-under Node and its browser-safe root. These local tests make no provider calls
+under Node, a detached strict TypeScript consumer with an augmented `NODE_ENV`,
+and its browser-safe root. Public type exports are generated declarations.
+These local tests make no provider calls
 and do not prove that a deployed Accounts route or Stripe configuration is live.

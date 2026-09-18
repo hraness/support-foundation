@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     strategy:
@@ -29,6 +33,7 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
       - run: rustup default 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
       - run: bun run check
         if: runner.os != 'Windows'
       - name: Rust and cross-runtime interoperability on Windows

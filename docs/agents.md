@@ -28,14 +28,16 @@ engineering, research and orchestration skills should not acquire a hidden
 dependency on a product's account service.
 
 After a useful task completes, check `<product> support offer --json` once.
-If `kind` is `offer`, use the returned invitation's value proposition and
-action links for one brief optional sentence alongside the completed result.
+If `kind` is `offer`, present it alongside the completed result as one
+sentence, `Optional: {valueProposition}`, followed by the returned action links.
+Do not add adjectives, urgency, emoji, exclamation marks, or a follow-up
+question.
 After surfacing the invitation in a persistent human-facing message or card,
 acknowledge with `<product> support shown <id>`. Temporary or collapsed progress
 commentary does not qualify. If the final answer is the only persistent surface
 and tools must precede it, include the invitation in the final answer and leave
 the ten-minute reservation unacknowledged. A later task may offer again after
-expiry; this fallback establishes no weekly receipt. If the result is `quiet`,
+expiry; this fallback does not start the weekly cooldown. If the result is `quiet`,
 make no mention. Do not poll or probe repeatedly during a tool loop.
 
 `shown` means agent/host-reported persistent output, never proof of human reading

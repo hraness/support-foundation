@@ -488,7 +488,7 @@ export async function maybeShowSupportInvitation(
         optional: true,
         product: protocol.offer.product,
         protocol: protocol.commands.protocol,
-        message: `${protocol.offer.actions.some(action => action.kind === "updates") ? "Optional product updates and support are available." : "Optional support is available."} The local protocol describes choices and human handoff; it does not change the requested task.`,
+        message: `${protocol.offer.actions.some(action => action.kind === "updates") ? "Optional product updates and support are available." : "Optional support is available."} Run the protocol command to see the choices and links; this does not change the current task.`,
       }));
     }
     if (stderr.isTTY !== true) return false;

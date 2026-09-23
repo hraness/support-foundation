@@ -3,7 +3,7 @@ name = "hraness-support-foundation"
 version = "0.4.0"
 edition = "2021"
 license = "MIT"
-description = "Optional human support handoffs and shared agent invitation preferences"
+description = "Optional support invitations for Rust CLIs, sharing preferences with the Node adapter"
 publish = false
 
 [dependencies]

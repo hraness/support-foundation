@@ -49,7 +49,7 @@ creation semantics. No lock is stolen, including one left by a crashed process.
 
 A Rust output worker bounds the caller's wait to 500 ms. A blocked underlying
 writer may settle later; clones share one pending-write guard until then. Late
-or failed output never earns a weekly receipt. The process does not wait for
+or failed output never starts the weekly cooldown. The process does not wait for
 that worker during exit. This is accepted-output accounting, not display or
 consent proof; it has the same uncertain-output reservation fallback as Node.
 Custom `Output` sinks must return success only after accepting the full text.

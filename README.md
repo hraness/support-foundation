@@ -1,19 +1,27 @@
-# Hraness support foundation
+# @hraness/support-foundation
 
-`@hraness/support-foundation` gives products a shared way to offer free product
-updates and optional paid support. A portable offer links to a human Accounts
-page; Node and Rust adapters control terminal and agent invitations with one local
-cooldown and a persistent opt-out across participating tools.
+`@hraness/support-foundation` lets Hraness products offer free product updates
+and optional paid support. An offer is a set of links to Hraness Accounts
+pages, where a person signs up for updates or reviews paid support. The Node
+and Rust adapters decide when a CLI may show an offer, to a person in the
+terminal or through an agent, using one cooldown and one opt-out shared by
+every participating tool that runs under the same user account.
 
 The package never opens a browser, authenticates, sends email, or creates a
-payment. Accounts owns available products, mailing consent, prices, recurring
-terms and checkout. Stripe Link can accelerate the person's checkout when it
-is enabled and eligible there.
+payment. Accounts manages available products, mailing consent, prices,
+recurring terms, and checkout.
+
+## Install
+
+Pin a release tag in the product that owns the integration:
+
+```json
+{ "dependencies": { "@hraness/support-foundation": "github:hraness/support-foundation#v0.4.1" } }
+```
+
+The root entry has no runtime dependencies or filesystem access.
 
 ## Create an offer
-
-Install an immutable release of this repository in the product that owns the
-integration. The root entry has no runtime dependencies or filesystem access.
 
 ```ts
 import { createSupportOffer } from "@hraness/support-foundation";
@@ -87,7 +95,7 @@ links remain available.
 When a Node offer includes product updates, the adapter can suggest the effective
 `git config --get user.email` from the current directory. Discovery happens only
 for an explicit offer or a due invitation, with a bounded local Git command.
-Missing Git, an unset or invalid email, and no-reply addresses simply leave the
+Missing Git, an unset or invalid email, and no-reply addresses leave the
 offer without a suggestion. Set `HRANESS_SUPPORT_EMAIL=off` or pass
 `gitEmail: false` to disable discovery; `cwd` selects the Git context.
 
@@ -121,13 +129,14 @@ value proposition, clean links, and signup/payment handoff. Replace only its
 documented `{invitationId}` placeholder with a returned ID; never execute an
 argv array as shell text.
 
-Check for an offer once after completing useful work. Surface one brief optional
-invitation in a persistent human-facing message or card, then acknowledge with
+Check for an offer once after completing useful work. Present it as one
+sentence, `Optional: {valueProposition}`, followed by the returned links, in a
+persistent message or card the person will see, then acknowledge with
 `shown <id>`. Temporary or collapsed progress commentary does not qualify. If
 the final answer is the only persistent surface and tools must precede it, put
 the invitation in that answer and leave its reservation unacknowledged. The
-reservation expires after ten minutes, so a later task may offer again; no
-weekly receipt is established in that fallback. Release a canceled, unshown
+reservation expires after ten minutes, so a later task may offer again; that
+fallback does not start the weekly cooldown. Release a canceled, unshown
 invitation once; do not reacquire it in the same task.
 
 This is guidance for cooperating product skills. A tool response cannot force
@@ -150,25 +159,27 @@ invitation IDs under `$XDG_STATE_HOME/hraness/support`, or
 `~/.local/state/hraness/support`. Set `HRANESS_SUPPORT=off` to suppress incidental
 offers. There is no background telemetry, account authentication, cross-device
 tracking or payment information. Browser and mobile preferences are a separate
-integration; local CLI state does not magically synchronize with them.
+integration; local CLI state does not sync with them.
 
-The existing strict `state.json` v1 schema remains unchanged. Separate bounded
-`discovery.json` and `presentation.json` sidecars share its nonblocking lock, so
-older clients keep using the same dismissal, snooze, reservation, and cooldown.
-Older clients do not implement discovery or idempotent acknowledgment and must
-be upgraded for the new presentation-order contract. A retry is valid only when
-its requested ID matches the receipt and the receipt timestamp matches committed
-state; stale IDs cannot affect a newer reservation. Malformed or unavailable state is preserved and suppresses
-incidental work, never reset silently.
+Preferences use the strict v1 `state.json` schema. Two small files,
+`discovery.json` and `presentation.json`, sit beside it and share its
+nonblocking lock, so older clients still honor the same dismissal, snooze,
+reservation, and cooldown. Older clients do not support discovery or
+repeat-safe acknowledgment; upgrade them to get the current presentation order.
+A retried acknowledgment counts only when its ID and timestamp match the saved
+state, so a stale ID cannot affect a newer reservation. Malformed or unavailable
+state is kept as is and suppresses incidental invitations; it is never silently
+reset.
 
-Presentation means the host or agent reports output, not that a person read it
-or consented. Human-mode output is revalidated under the preference lock after
-email discovery, then written before its receipt is committed. Output waits are
-capped at 500 ms; asynchronous errors and rejected sinks earn no weekly
-cooldown. An unresolved sink admits no further write until it settles. A crash
-or storage failure after output can leave only the ten-minute reservation, so
-a later task may repeat an invitation. No cross-process human-display proof or
-exactly-once guarantee is claimed.
+“Shown” means the host or agent reported that it displayed the invitation, not
+that a person read it or agreed to anything. In human mode the adapter rechecks
+preferences under the lock after looking up the Git email, writes the
+invitation, and only then records it. Output gets at most 500 ms. If the write
+fails or is rejected, the invitation does not start the weekly cooldown, and
+nothing else is written until the pending write settles. A crash or storage
+failure after output can leave only the ten-minute reservation, so a later task
+may show the invitation again. The package does not guarantee that an
+invitation appears exactly once.
 
 ## Other media
 

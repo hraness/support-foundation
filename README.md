@@ -5,7 +5,7 @@ and optional paid support. An offer is a set of links to Hraness Accounts
 pages, where a person signs up for updates or reviews paid support. The Node
 and Rust adapters decide when a CLI may show an offer, to a person in the
 terminal or through an agent, using one cooldown and one opt-out shared by
-every participating tool on the device.
+every participating tool that runs under the same user account.
 
 The package never opens a browser, authenticates, sends email, or creates a
 payment. Accounts manages available products, mailing consent, prices,

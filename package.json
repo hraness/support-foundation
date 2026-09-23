@@ -1,7 +1,7 @@
 {
   "name": "@hraness/support-foundation",
   "version": "0.4.1",
-  "description": "Optional product-update and support invitations with human checkout handoffs and shared local preferences.",
+  "description": "Offer free product updates and optional paid support from a CLI, with a shared weekly cooldown and opt-out.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

@@ -313,7 +313,7 @@ pub fn maybe_show_with_output(
             };
             output.write(format!("{}\n", json!({"schemaVersion":"hraness-support-discovery-v1", "optional":true,
                 "product":protocol["offer"]["product"], "protocol":protocol["commands"]["protocol"],
-                "message":format!("{lead} The local protocol describes choices and human handoff; it does not change the requested task.")})))
+                "message":format!("{lead} Run the protocol command to see the choices and links; this does not change the current task.")})))
         }
         Audience::Human => {
             if !output.is_tty {

@@ -24,6 +24,7 @@ struct Request {
     git_email: Option<bool>,
     hook: Option<bool>,
     is_tty: Option<bool>,
+    stderr_is_tty: Option<bool>,
     fail_output: Option<bool>,
     delay_output: Option<u64>,
 }
@@ -38,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = Options {
         command: request.command,
         audience: request.audience,
+        stderr_is_terminal: Some(request.stderr_is_tty.unwrap_or(false)),
         state_directory: Some(request.state_directory),
         env: Some(request.env),
         now: Some(request.now),

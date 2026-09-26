@@ -34,12 +34,15 @@ pub enum Audience {
     Off,
 }
 
-/// Explicit host values override environment selection. Default audience is
-/// agent even in a PTY. Explicit support requests remain available when off.
+/// Explicit host values override environment selection. Unset, agent markers
+/// select agent, an interactive stderr selects human, and anything else stays
+/// quiet. Explicit support requests remain available when off.
 #[derive(Clone, Default)]
 pub struct Options {
     pub command: Vec<String>,
     pub audience: Option<Audience>,
+    /// Whether stderr is a terminal. `None` checks the process's stderr.
+    pub stderr_is_terminal: Option<bool>,
     pub state_directory: Option<PathBuf>,
     pub env: Option<BTreeMap<String, String>>,
     pub now: Option<u64>,
@@ -191,6 +194,121 @@ pub(crate) fn render_offer(offer: &Value) -> String {
     lines.join("\n") + "\n"
 }
 
+pub(crate) fn human_copy(key: &str) -> &'static str {
+    contract()["human"][key]
+        .as_str()
+        .expect("generated human copy")
+}
+
+fn ascii_only(options: &Options) -> bool {
+    static UTF8: OnceLock<Regex> = OnceLock::new();
+    let utf8 = UTF8.get_or_init(|| Regex::new(r"(?i)utf-?8").expect("constant regex"));
+    env_value(options, "HRANESS_ASCII").as_deref() == Some("1")
+        || env_value(options, "TERM").as_deref() == Some("dumb")
+        // The first nonempty of LC_ALL, LC_CTYPE, LANG is the effective character locale.
+        || !["LC_ALL", "LC_CTYPE", "LANG"]
+            .iter()
+            .find_map(|name| env_value(options, name).filter(|value| !value.is_empty()))
+            .is_some_and(|value| utf8.is_match(&value))
+}
+
+/// Replace CLI symbols with their ASCII fallbacks on plain terminals.
+pub(crate) fn symbols(text: &str, options: &Options) -> String {
+    if !ascii_only(options) {
+        return text.to_owned();
+    }
+    let table = &contract()["asciiSymbols"];
+    text.chars()
+        .map(|c| {
+            table[c.to_string().as_str()]
+                .as_str()
+                .map_or_else(|| c.to_string(), str::to_owned)
+        })
+        .collect()
+}
+
+pub(crate) fn command_text(options: &Options) -> String {
+    options
+        .command
+        .iter()
+        .enumerate()
+        .map(|(index, part)| {
+            if index == 0 {
+                part.rsplit(['/', '\\']).next().unwrap_or(part).to_owned()
+            } else {
+                part.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Fill `{command}`, `{product}`, `{date}` and `{argument}` like the Node adapter.
+pub(crate) fn support_line(
+    template: &str,
+    profile: &SupportProfile,
+    options: &Options,
+    values: &[(&str, &str)],
+) -> String {
+    let command = command_text(options);
+    // Without a product prefix the command is plain `support …`.
+    let mut text = if command.is_empty() {
+        template.replace("{command} ", "")
+    } else {
+        template.to_owned()
+    };
+    let mut all = vec![
+        ("command", command.as_str()),
+        ("product", profile.name.as_str()),
+    ];
+    all.extend_from_slice(values);
+    text = fill(&text, &all);
+    symbols(&text, options)
+}
+
+fn fill(template: &str, values: &[(&str, &str)]) -> String {
+    static PLACEHOLDER: OnceLock<Regex> = OnceLock::new();
+    PLACEHOLDER
+        .get_or_init(|| Regex::new(r"\{(command|product|date|argument)\}").expect("constant regex"))
+        .replace_all(template, |captures: &regex::Captures<'_>| {
+            let key = &captures[1];
+            values
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map_or_else(|| captures[0].to_owned(), |(_, value)| (*value).to_owned())
+        })
+        .into_owned()
+}
+
+/// UTC `YYYY-MM-DD` for epoch milliseconds, matching `Date.prototype.toISOString`.
+pub(crate) fn iso_date(epoch_ms: u64) -> String {
+    let days = i64::try_from(epoch_ms / 86_400_000).unwrap_or(i64::MAX / 2);
+    // Howard Hinnant's civil_from_days.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// The standard `Help & support` row for a desktop-foundation menu kit v2
+/// snapshot. The product maps its action ID to [`support_menu_url`].
+pub fn support_menu_item() -> Value {
+    contract()["menuItem"].clone()
+}
+
+/// The page a desktop `Help & support` row opens: both updates and support choices.
+pub fn support_menu_url(profile: &SupportProfile) -> Result<String, SupportError> {
+    let offer = create_support_offer(profile, "desktop")?;
+    let url = offer["actions"][0]["url"].as_str().expect("validated URL");
+    Ok(url.split('#').next().unwrap_or(url).to_owned())
+}
+
 pub(crate) fn env_value(options: &Options, key: &str) -> Option<String> {
     match &options.env {
         Some(env) => env.get(key).cloned(),
@@ -198,18 +316,57 @@ pub(crate) fn env_value(options: &Options, key: &str) -> Option<String> {
     }
 }
 
-pub(crate) fn audience(options: &Options) -> Audience {
-    options.audience.unwrap_or_else(|| {
-        match env_value(options, "HRANESS_SUPPORT_AUDIENCE").as_deref() {
-            None | Some("agent") => Audience::Agent,
-            Some("human") => Audience::Human,
-            _ => Audience::Off,
+fn role(value: &str) -> Audience {
+    match value {
+        "agent" => Audience::Agent,
+        "human" => Audience::Human,
+        _ => Audience::Off,
+    }
+}
+
+// TODO(df-0.8): use hraness-cli-kit `audience::detect`. This copy follows the
+// shared Hraness CLI contract; the marker names come from the generated contract.
+/// A role the host or environment chose on purpose, or `None` to infer one.
+pub(crate) fn explicit_audience(options: &Options) -> Option<Audience> {
+    if let Some(audience) = options.audience {
+        return Some(audience);
+    }
+    if let Some(shared) = env_value(options, "HRANESS_AUDIENCE")
+        .filter(|value| ["human", "agent", "quiet", "off"].contains(&value.as_str()))
+    {
+        return Some(role(&shared));
+    }
+    // Older hosts set the support-only variable; invalid values stay quiet.
+    env_value(options, "HRANESS_SUPPORT_AUDIENCE").map(|value| role(&value))
+}
+
+/// Explicit role, then agent markers, then human at an interactive stderr, else off.
+pub(crate) fn audience(options: &Options, stderr_is_terminal: bool) -> Audience {
+    explicit_audience(options).unwrap_or_else(|| {
+        let agent = contract()["agentMarkers"]
+            .as_array()
+            .expect("generated agent markers")
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|name| env_value(options, name).is_some_and(|value| !value.is_empty()));
+        if agent {
+            Audience::Agent
+        } else if stderr_is_terminal {
+            Audience::Human
+        } else {
+            Audience::Off
         }
     })
 }
 
 pub(crate) fn suppressed(options: &Options) -> bool {
-    if matches!(audience(options), Audience::Off)
+    // Products set the support-only variable to off for their own child processes.
+    // Only an explicit host option overrides that.
+    let legacy_off = options.audience.is_none()
+        && env_value(options, "HRANESS_SUPPORT_AUDIENCE")
+            .is_some_and(|value| value != "agent" && value != "human");
+    if matches!(explicit_audience(options), Some(Audience::Off))
+        || legacy_off
         || env_value(options, "HRANESS_SUPPORT")
             .is_some_and(|s| ["off", "false", "0"].contains(&js_trim(&s).to_lowercase().as_str()))
     {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import ts from "typescript";
-import { createSupportOffer, createSupportProtocol, renderSupportOffer } from "../src/index.js";
+import { SUPPORT_ASCII_SYMBOLS, SUPPORT_HUMAN_COPY, createSupportOffer, createSupportProtocol, renderSupportOffer, supportMenuItem } from "../src/index.js";
 
 // JavaScript remains the authoritative published contract. Parse only the
 // declared literal/arithmetic constants; a changed expression fails this gate
@@ -19,9 +19,19 @@ function literal(node: ts.Expression): number | string {
 }
 const source = ts.createSourceFile("node.ts", await readFile(new URL("../src/node.ts", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
 const policy: Record<string, number | string> = {};
+let agentMarkers: string[] | undefined;
 for (const statement of source.statements) {
   if (!ts.isVariableStatement(statement)) continue;
   for (const declaration of statement.declarationList.declarations) {
+    if (ts.isIdentifier(declaration.name) && declaration.name.text === "AGENT_MARKERS") {
+      // The shared audience rule's exact agent marker names, as one reviewed literal list.
+      const initializer = declaration.initializer;
+      assert.ok(initializer && ts.isAsExpression(initializer) && ts.isArrayLiteralExpression(initializer.expression));
+      agentMarkers = initializer.expression.elements.map(element => {
+        assert.ok(ts.isStringLiteral(element));
+        return element.text;
+      });
+    }
     if (ts.isIdentifier(declaration.name) && wanted.has(declaration.name.text)) {
       assert.ok(declaration.initializer);
       policy[declaration.name.text] = literal(declaration.initializer);
@@ -29,6 +39,7 @@ for (const statement of source.statements) {
   }
 }
 assert.deepEqual(Object.keys(policy).sort(), [...wanted].sort());
+assert.ok(agentMarkers !== undefined && agentMarkers.length > 0);
 const profile = { id: "contract-product", name: "PRODUCT_NAME", updates: true, valueProposition: "VALUE_PROPOSITION" };
 const offer = createSupportOffer(profile, "cli");
 const rendered = renderSupportOffer({ ...offer, emailSuggestion: { email: "EMAIL_ADDRESS", source: "git-config", verified: false } }).trimEnd().split("\n");
@@ -42,6 +53,10 @@ const contract = JSON.stringify({
     emailSuggestion: rendered.at(-2),
     payment: rendered.at(-1),
   },
+  human: SUPPORT_HUMAN_COPY,
+  asciiSymbols: SUPPORT_ASCII_SYMBOLS,
+  agentMarkers,
+  menuItem: supportMenuItem(),
 }, null, 2) + "\n";
 const output = new URL("../rust/src/contract-v1.json", import.meta.url);
 if (process.argv.includes("--check")) assert.equal(await readFile(output, "utf8"), contract, "Rust contract drifted from the published JavaScript protocol/policy");

@@ -16,7 +16,7 @@ recurring terms, and checkout.
 Pin a release tag in the product that owns the integration:
 
 ```json
-{ "dependencies": { "@hraness/support-foundation": "github:hraness/support-foundation#v0.4.1" } }
+{ "dependencies": { "@hraness/support-foundation": "github:hraness/support-foundation#v0.5.0" } }
 ```
 
 The root entry has no runtime dependencies or filesystem access.
@@ -63,26 +63,47 @@ Accounts product ID cannot identify an executable: Ghostget uses `wrench` there.
 | `offer --json` | Reserve a due agent invitation, or return `kind: "quiet"` |
 | `shown <id>` | Record agent/host-reported output after presentation; an identical retry never extends cooldown |
 | `release <id>` | Cancel only that exact unpresented reservation |
-| `dismiss` | Stop incidental invitations across participating tools on this device |
-| `snooze` | Pause invitations for 30 days |
-| `enable` | Re-enable invitations |
-| `status --json` | Read the local invitation preference |
+| `-h`, `--help`, `help` | Print the command's help for people |
+| `dismiss [--json]` | Stop incidental invitations across participating tools on this device |
+| `snooze [--json]` | Pause invitations for 30 days |
+| `enable [--json]` | Re-enable invitations |
+| `status [--json]` | Read the local invitation preference |
+
+`dismiss`, `snooze`, `enable` and `status` print one plain sentence, such as
+`✓ Support invitations are off on this device.`, and at a terminal a second
+line on stderr that says how to undo it. With `--json`, or when the caller is a
+detected agent, they print the versioned JSON result instead. An unknown
+argument prints `✗ Unknown support command "…"` and `→ <command> support --help`
+with exit 2. Symbols fall back to ASCII (`OK`, `FAIL`, `->`) when `TERM=dumb`,
+the locale is not UTF-8, or `HRANESS_ASCII=1`.
 
 Call `maybeShowSupportInvitation(profile, { command: ["ghostget"], usefulResult:
-true })` only after a command has completed useful work successfully. Unknown
-callers, including PTYs and piped/JSON commands, receive a compact versioned
-discovery notice on stderr. Stdout stays unchanged. A notice contains the
-protocol command, does not discover email or reserve an invitation, and never
-consumes the weekly presentation window. Its shared attempt throttle is ten
-minutes. Root help and public agent documentation should also expose the
-protocol command so discovery works without an installed product skill.
+true })` only after a command has completed useful work successfully. The
+adapter follows the shared Hraness audience rule:
 
-Set `audience: "human"` or `HRANESS_SUPPORT_AUDIENCE=human` for a direct human
-invitation on interactive stderr. `agent` selects discovery, and `off` suppresses
-incidental output and skill offer claims. Unknown role values fail quiet. The
-explicit host option overrides the audience environment variable; CI and
-`HRANESS_SUPPORT=off` always suppress incidental work. Explicit support and
-protocol requests remain available. A TTY alone never establishes a human.
+1. An explicit host `audience` option, then `HRANESS_AUDIENCE`
+   (`human`, `agent`, `quiet` or `off`), then the older
+   `HRANESS_SUPPORT_AUDIENCE`.
+2. Any of the exact agent markers `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`,
+   `CODEX_SANDBOX_NETWORK_DISABLED`, `CURSOR_AGENT` or `GEMINI_CLI` set to a
+   nonempty value selects the agent.
+3. An interactive stderr selects a person.
+4. Anything else stays quiet: no output and no state.
+
+A person sees the invitation below a rule line, followed by how to hide it:
+`Hide these: ghostget support dismiss · Ask again in 30 days: ghostget support
+snooze`. A detected agent receives a compact versioned discovery notice on
+stderr instead. Stdout stays unchanged. A notice contains the protocol command,
+does not discover email or reserve an invitation, and never consumes the weekly
+presentation window. Its shared attempt throttle is ten minutes. Root help and
+public agent documentation should also expose the protocol command so
+discovery works without an installed product skill.
+
+`off`, `quiet` and unknown role values suppress incidental output and skill
+offer claims. Products that set `HRANESS_SUPPORT_AUDIENCE=off` for their own
+child processes keep those children quiet; only an explicit host option
+overrides that. CI and `HRANESS_SUPPORT=off` always suppress incidental work.
+Explicit support and protocol requests remain available.
 The integrating product must exclude help, version, errors, probes, quiet
 modes, embedded/SDK execution, nested tool calls, and unattended tasks.
 
@@ -184,7 +205,12 @@ invitation appears exactly once.
 ## Other media
 
 Use the same root offer for a website footer or a desktop menu action. The
-product owns its presentation and browser-opening action. Keep web links
+product owns its presentation and browser-opening action. For a
+desktop-foundation menu (menu kit v2), `supportMenuItem()` returns the standard
+`Help & support` row (`symbol: "action.support"`, `opens: "browser"`, optional
+Option-key alternate such as Copy diagnostics), and `supportMenuUrl(profile)`
+returns the page that row opens. The Rust crate exports `support_menu_item()`
+and `support_menu_url(&profile)`. Keep web links
 visible without automatic modals; use stable desktop menu items. Newsletter
 signup and payment remain independent choices. Applications distributed
 through app stores must use their applicable purchasing rules.

@@ -4,7 +4,10 @@ import { constants } from "node:fs";
 import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { createSupportOffer, createSupportProtocol, renderSupportOffer, type SupportOffer, type SupportProfile } from "./index.js";
+import {
+  SUPPORT_ASCII_SYMBOLS, SUPPORT_HUMAN_COPY, createSupportOffer, createSupportProtocol, renderSupportOffer,
+  type SupportOffer, type SupportProfile,
+} from "./index.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1_000;
 const SNOOZE_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -19,8 +22,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 export interface SupportCommandOptions {
   /** Product-owned executable and fixed prefix arguments before `support`. */
   readonly command?: readonly string[];
-  /** Explicit host role wins over HRANESS_SUPPORT_AUDIENCE; off/invalid suppress incidental work. */
+  /**
+   * Explicit host role. It wins over HRANESS_AUDIENCE and HRANESS_SUPPORT_AUDIENCE;
+   * off/quiet suppress incidental work. Unset, agent markers select agent,
+   * an interactive stderr selects human, and anything else stays quiet.
+   */
   readonly audience?: SupportAudience;
+  /** The stream whose TTY state decides between human and quiet. Defaults to process.stderr. */
+  readonly stderr?: SupportOutput;
   readonly stateDirectory?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Epoch milliseconds; useful for deterministic hosts and tests. */
@@ -31,7 +40,7 @@ export interface SupportCommandOptions {
   readonly gitEmail?: boolean;
 }
 
-export type SupportAudience = "agent" | "human" | "off";
+export type SupportAudience = "agent" | "human" | "off" | "quiet";
 
 export interface SupportOutput {
   readonly isTTY?: boolean;
@@ -49,8 +58,6 @@ export interface SupportCommandResult {
 export interface SupportInvitationOptions extends SupportCommandOptions {
   /** Set only for a completed, useful operation, never help, probes, or failures. */
   readonly usefulResult: boolean;
-  /** Unknown callers, including PTYs, receive discovery. TTY alone never implies a human. */
-  readonly stderr?: SupportOutput;
 }
 
 interface Reservation {
@@ -122,7 +129,11 @@ function stateDirectory(options: SupportCommandOptions): string {
 
 function environmentSuppresses(options: SupportCommandOptions): boolean {
   const env = options.env ?? process.env;
-  if (audience(options) === "off") return true;
+  if (explicitAudience(options) === "off") return true;
+  // Products set the support-only variable to off for their own child processes;
+  // only an explicit host option overrides that.
+  const legacy = env.HRANESS_SUPPORT_AUDIENCE;
+  if (options.audience === undefined && legacy !== undefined && legacy !== "agent" && legacy !== "human") return true;
   if (["off", "false", "0"].includes(env.HRANESS_SUPPORT?.trim().toLowerCase() ?? "")) return true;
   return ["CI", "CONTINUOUS_INTEGRATION", "GITHUB_ACTIONS", "TF_BUILD", "BUILD_NUMBER", "TEAMCITY_VERSION", "JENKINS_URL"]
     .some((name) => {
@@ -131,10 +142,62 @@ function environmentSuppresses(options: SupportCommandOptions): boolean {
     });
 }
 
-function audience(options: SupportCommandOptions): SupportAudience {
-  const value = options.audience ?? (options.env ?? process.env).HRANESS_SUPPORT_AUDIENCE;
-  if (value === undefined) return "agent";
-  return value === "agent" || value === "human" || value === "off" ? value : "off";
+type Role = "agent" | "human" | "off";
+
+// TODO(df-0.8): use detectAudience from @hraness/desktop-foundation. This copy
+// follows the shared Hraness CLI contract verbatim, because this package must
+// not depend on desktop-foundation. Only exact names count as agent markers.
+const AGENT_MARKERS = ["AI_AGENT", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CURSOR_AGENT", "GEMINI_CLI"] as const;
+
+/** A role the host or environment chose on purpose, or undefined to infer one. */
+function explicitAudience(options: SupportCommandOptions): Role | undefined {
+  const role = (value: string): Role => value === "agent" || value === "human" ? value : "off";
+  if (options.audience !== undefined) return role(options.audience);
+  const env = options.env ?? process.env;
+  const shared = env.HRANESS_AUDIENCE;
+  if (shared === "human" || shared === "agent" || shared === "quiet" || shared === "off") return role(shared);
+  // Older hosts set the support-only variable; invalid values stay quiet.
+  const legacy = env.HRANESS_SUPPORT_AUDIENCE;
+  return legacy === undefined ? undefined : role(legacy);
+}
+
+/** Explicit role, then agent markers, then human at an interactive stderr, else quiet (off). */
+function audience(options: SupportCommandOptions, stderr: SupportOutput = options.stderr ?? process.stderr): Role {
+  const explicit = explicitAudience(options);
+  if (explicit !== undefined) return explicit;
+  const env = options.env ?? process.env;
+  if (AGENT_MARKERS.some(name => (env[name] ?? "") !== "")) return "agent";
+  return stderr.isTTY === true ? "human" : "off";
+}
+
+function asciiOnly(env: Readonly<Record<string, string | undefined>>): boolean {
+  if (env.HRANESS_ASCII === "1" || env.TERM === "dumb") return true;
+  // The first nonempty of LC_ALL, LC_CTYPE, LANG is the effective character locale.
+  const locale = [env.LC_ALL, env.LC_CTYPE, env.LANG].find(value => (value ?? "") !== "") ?? "";
+  return !/utf-?8/iu.test(locale);
+}
+
+function symbols(text: string, options: SupportCommandOptions): string {
+  if (!asciiOnly(options.env ?? process.env)) return text;
+  return Array.from(text, character => SUPPORT_ASCII_SYMBOLS[character] ?? character).join("");
+}
+
+function commandText(options: SupportCommandOptions): string {
+  const command = options.command ?? [];
+  return command.map((part, index) => index === 0 ? part.split(/[\\/]/u).at(-1)! : part).join(" ");
+}
+
+function fill(template: string, values: Readonly<Record<string, string>>): string {
+  // Without a product prefix the command is plain `support …`.
+  return (values.command === "" ? template.replaceAll("{command} ", "") : template).replace(/\{(command|product|date|argument)\}/gu, (match, key: string) => values[key] ?? match);
+}
+
+function isoDate(epochMs: number): string {
+  return new Date(epochMs).toISOString().slice(0, 10);
+}
+
+function supportLine(template: string, profile: SupportProfile, options: SupportCommandOptions, values: Readonly<Record<string, string>> = {}): string {
+  return symbols(fill(template, { command: commandText(options), product: profile.name, ...values }), options);
 }
 
 /** Git configuration is only a convenient default; it does not verify ownership. */
@@ -358,6 +421,23 @@ function failure(message: string, exitCode = 1): SupportCommandResult {
   return { exitCode, stdout: "", stderr: `${message}\n` };
 }
 
+type Human = (template: string, values?: Readonly<Record<string, string>>) => string;
+
+/** Human text on stdout; the hint goes to stderr only for a person at a terminal. */
+function said(line: string, hint: string | undefined, role: Role): SupportCommandResult {
+  return { exitCode: 0, stdout: `${line}\n`, stderr: hint !== undefined && role === "human" ? `${hint}\n` : "" };
+}
+
+function stateFailure(reason: "busy" | "state-unavailable", jsonOutput: boolean, human: Human): SupportCommandResult {
+  if (jsonOutput) return failure(`Support preferences are unavailable (${reason}).`);
+  return failure(human(reason === "busy" ? SUPPORT_HUMAN_COPY.busy : SUPPORT_HUMAN_COPY.unavailable));
+}
+
+function argumentText(value: string): string {
+  const visible = Array.from(value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "")).slice(0, 40).join("");
+  return visible === "" ? "?" : visible;
+}
+
 /** Explicit offers always work independently of local preferences; no action opens a browser or pays. */
 export async function runSupportCommand(
   profile: SupportProfile,
@@ -369,7 +449,11 @@ export async function runSupportCommand(
       return success(createSupportProtocol(profile, { command: options.command ?? [] }));
     }
     const offer = createSupportOffer(profile, args[0] === "offer" ? "agent" : "cli");
+    const human: Human = (template, values) => supportLine(template, profile, options, values);
     if (args.length === 0) return { exitCode: 0, stdout: renderSupportOffer(await withGitEmailSuggestion(offer, options)), stderr: "" };
+    if (args.length === 1 && ["-h", "--help", "help"].includes(args[0]!)) {
+      return { exitCode: 0, stdout: `${human(SUPPORT_HUMAN_COPY.help)}\n`, stderr: "" };
+    }
     if (args.length === 1 && args[0] === "--json") return success(await withGitEmailSuggestion(offer, options));
     if (args.length === 2 && args[0] === "offer" && args[1] === "--json") {
       const claim = await claimInvitation(options);
@@ -391,21 +475,40 @@ export async function runSupportCommand(
       if (!result.value) return failure("Support invitation is invalid or expired.", 2);
       return success({ schemaVersion: RESULT_SCHEMA, kind: "released" });
     }
-    if (args.length === 2 && args[0] === "status" && args[1] === "--json") {
-      const result = await withState(options, (state) => ({ value: {
-        schemaVersion: RESULT_SCHEMA,
-        kind: "status",
-        environmentSuppressed: environmentSuppresses(options),
-        optedOut: state.optedOut,
-        snoozedUntil: state.snoozedUntil,
-        lastShownAt: state.lastShownAt,
-        cooldownUntil: state.lastShownAt === null ? null : state.lastShownAt + WEEK_MS,
-        reservationExpiresAt: state.reservation?.expiresAt ?? null,
-      } }));
-      return result.ok ? success(result.value) : failure(`Support preferences are unavailable (${result.reason}).`);
-    }
     const command = args[0];
-    if (args.length === 1 && (command === "dismiss" || command === "snooze" || command === "enable")) {
+    const flagged = args.length === 2 && args[1] === "--json";
+    if ((args.length === 1 || flagged) && (command === "status" || command === "dismiss" || command === "snooze" || command === "enable")) {
+      // `--json` always wins; otherwise agents keep JSON and people get one line.
+      const role = audience(options);
+      const jsonOutput = flagged || role === "agent";
+      if (command === "status") {
+        const now = currentTime(options);
+        const suppressed = environmentSuppresses(options);
+        const result = await withState(options, (state) => ({ value: state }));
+        if (!result.ok) return stateFailure(result.reason, jsonOutput, human);
+        const state = result.value;
+        if (jsonOutput) {
+          return success({
+            schemaVersion: RESULT_SCHEMA,
+            kind: "status",
+            environmentSuppressed: suppressed,
+            optedOut: state.optedOut,
+            snoozedUntil: state.snoozedUntil,
+            lastShownAt: state.lastShownAt,
+            cooldownUntil: state.lastShownAt === null ? null : state.lastShownAt + WEEK_MS,
+            reservationExpiresAt: state.reservation?.expiresAt ?? null,
+          });
+        }
+        if (suppressed) return said(human(SUPPORT_HUMAN_COPY.statusEnvironment), undefined, role);
+        if (state.optedOut) return said(human(SUPPORT_HUMAN_COPY.statusOff), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+        if (state.snoozedUntil !== null && now < state.snoozedUntil) {
+          return said(human(SUPPORT_HUMAN_COPY.statusSnoozed, { date: isoDate(state.snoozedUntil) }), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+        }
+        if (state.lastShownAt !== null && now < state.lastShownAt + WEEK_MS) {
+          return said(human(SUPPORT_HUMAN_COPY.statusCooldown, { date: isoDate(state.lastShownAt + WEEK_MS) }), human(SUPPORT_HUMAN_COPY.hintDismiss), role);
+        }
+        return said(human(SUPPORT_HUMAN_COPY.statusOn), human(SUPPORT_HUMAN_COPY.hintDismiss), role);
+      }
       const now = currentTime(options);
       const result = await withState(options, (state) => {
         state.reservation = null;
@@ -414,9 +517,13 @@ export async function runSupportCommand(
         else { state.optedOut = false; state.snoozedUntil = null; }
         return { value: { schemaVersion: RESULT_SCHEMA, kind: command === "dismiss" ? "dismissed" : command === "snooze" ? "snoozed" : "enabled" }, changed: true };
       });
-      return result.ok ? success(result.value) : failure(`Support preferences are unavailable (${result.reason}).`);
+      if (!result.ok) return stateFailure(result.reason, jsonOutput, human);
+      if (jsonOutput) return success(result.value);
+      if (command === "dismiss") return said(human(SUPPORT_HUMAN_COPY.dismissed), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+      if (command === "snooze") return said(human(SUPPORT_HUMAN_COPY.snoozed), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+      return said(human(SUPPORT_HUMAN_COPY.enabled), human(SUPPORT_HUMAN_COPY.hintDismiss), role);
     }
-    return failure("Usage: support [--json | protocol --json | offer --json | shown <id> | release <id> | dismiss | snooze | enable | status --json]", 2);
+    return failure(human(SUPPORT_HUMAN_COPY.unknown, { argument: argumentText(args.join(" ")) }), 2);
   } catch {
     return failure("Support configuration is invalid or unavailable.", 2);
   }
@@ -471,14 +578,24 @@ async function writeOutput(sink: SupportOutput, message: string): Promise<boolea
   });
 }
 
-/** Best-effort post-success notice. Never call this for failed or merely diagnostic work. */
+/** The incidental human invitation: a rule, the offer, and how to hide these. */
+function renderInvitation(profile: SupportProfile, offer: SupportOffer, options: SupportCommandOptions): string {
+  const optOut = commandText(options) === "" ? SUPPORT_HUMAN_COPY.optOutEnvironment : SUPPORT_HUMAN_COPY.optOut;
+  return symbols(`\n${SUPPORT_HUMAN_COPY.rule}\n${renderSupportOffer(offer)}`, options) + `${supportLine(optOut, profile, options)}\n`;
+}
+
+/**
+ * Best-effort post-success notice. Never call this for failed or merely
+ * diagnostic work. People at an interactive stderr get the human invitation,
+ * detected agents get one discovery line, and everyone else gets nothing.
+ */
 export async function maybeShowSupportInvitation(
   profile: SupportProfile,
   options: SupportInvitationOptions,
 ): Promise<boolean> {
   try {
     const stderr = options.stderr ?? process.stderr;
-    const target = audience(options);
+    const target = audience(options, stderr);
     if (!options.usefulResult || target === "off" || environmentSuppresses(options)) return false;
     if (target === "agent") {
       const protocol = createSupportProtocol(profile, { command: options.command ?? [] });
@@ -495,7 +612,7 @@ export async function maybeShowSupportInvitation(
     const offer = createSupportOffer(profile, "cli");
     const claim = await claimInvitation(options);
     if (claim.kind !== "offer") return false;
-    const message = renderSupportOffer(await withGitEmailSuggestion(offer, options));
+    const message = renderInvitation(profile, await withGitEmailSuggestion(offer, options), options);
     return await presentInvitation(claim.id, message, stderr, options);
   } catch {
     return false;

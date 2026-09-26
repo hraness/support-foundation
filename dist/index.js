@@ -59,6 +59,76 @@ function renderSupportOffer(offer) {
 `) + `
 `;
 }
+var SUPPORT_HUMAN_COPY = Object.freeze({
+  rule: "─".repeat(40),
+  optOut: "Hide these: {command} support dismiss · Ask again in 30 days: {command} support snooze",
+  optOutEnvironment: "Hide these: set HRANESS_SUPPORT=off",
+  help: [
+    "Usage: {command} support [command]",
+    "",
+    "See optional product updates and paid support for {product}.",
+    "",
+    "Commands",
+    "  (none)      Show the links for updates and support",
+    "  status      Show whether invitations are on",
+    "  dismiss     Stop showing invitations on this device",
+    "  snooze      Hide invitations for 30 days",
+    "  enable      Show invitations again",
+    "",
+    "Options",
+    "  --json      Print machine-readable output",
+    "  -h, --help  Show this help"
+  ].join(`
+`),
+  dismissed: "✓ Support invitations are off on this device.",
+  snoozed: "✓ Support invitations are hidden for 30 days.",
+  enabled: "✓ Support invitations are on. You'll see at most one a week.",
+  statusOn: "● Support invitations are on. You'll see at most one a week.",
+  statusCooldown: "● Support invitations are on. The next one can appear after {date}.",
+  statusSnoozed: "○ Support invitations are hidden until {date}.",
+  statusOff: "○ Support invitations are off on this device.",
+  statusEnvironment: "○ Support invitations are turned off in this environment.",
+  hintEnable: "Turn them back on: {command} support enable",
+  hintDismiss: "Turn them off: {command} support dismiss",
+  busy: "✗ Another support command is running. Try again in a moment.",
+  unavailable: `✗ Couldn't read or save support preferences on this device.
+→ Try again, or set HRANESS_SUPPORT=off to hide invitations.`,
+  unknown: `✗ Unknown support command "{argument}".
+→ {command} support --help`
+});
+var SUPPORT_ASCII_SYMBOLS = Object.freeze({
+  "✓": "OK",
+  "✗": "FAIL",
+  "→": "->",
+  "●": "*",
+  "○": "o",
+  "─": "-",
+  "·": "-"
+});
+var ACTION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+function supportMenuItem(options = {}) {
+  const id = options.id ?? "support.open";
+  const alternate = options.alternate;
+  if (!ACTION_ID.test(id) || id.startsWith("foundation.") || alternate !== undefined && (!ACTION_ID.test(alternate.id) || alternate.id === id || alternate.id.startsWith("foundation.") || !plainText(alternate.label, 48) || alternate.symbol !== undefined && alternate.symbol !== "action.copy")) {
+    throw new TypeError("Invalid support menu item options.");
+  }
+  return Object.freeze({
+    kind: "action",
+    id,
+    label: "Help & support",
+    symbol: "action.support",
+    opens: "browser",
+    ...alternate === undefined ? {} : {
+      alternate: Object.freeze({ id: alternate.id, label: alternate.label, ...alternate.symbol === undefined ? {} : { symbol: alternate.symbol } })
+    }
+  });
+}
+function supportMenuUrl(profile) {
+  const offer = createSupportOffer(profile, "desktop");
+  const url = new URL(offer.actions[0].url);
+  url.hash = "";
+  return url.href;
+}
 function createSupportProtocol(profile, options) {
   const command = options.command;
   if (!Array.isArray(command) || command.length < 1 || command.length > 8 || !Array.from(command).every((part) => plainText(part, 240))) {
@@ -98,8 +168,12 @@ function createSupportProtocol(profile, options) {
   });
 }
 export {
+  supportMenuUrl,
+  supportMenuItem,
   renderSupportOffer,
   parseSupportProfile,
   createSupportProtocol,
-  createSupportOffer
+  createSupportOffer,
+  SUPPORT_HUMAN_COPY,
+  SUPPORT_ASCII_SYMBOLS
 };

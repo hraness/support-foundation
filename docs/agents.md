@@ -16,12 +16,17 @@ from invitations, Git-email discovery, and the weekly presentation cadence.
 The product keeps ordinary stdout and exit codes unchanged and excludes quiet,
 help, probes, failures, nested calls, SDK/embedded and unattended execution.
 
-`HRANESS_SUPPORT_AUDIENCE=agent|human|off` selects the audience; unknown defaults
-to agent discovery, invalid values suppress incidental work. An explicit host
-`audience` option wins over this variable. Human mode also requires interactive
-stderr. CI and `HRANESS_SUPPORT=off` always suppress incidental work. Audience
-off/invalid values suppress skill offer claims too. Explicit support and
-protocol requests remain available.
+The audience follows the shared Hraness rule: an explicit host `audience`
+option, then `HRANESS_AUDIENCE=human|agent|quiet|off`, then the older
+`HRANESS_SUPPORT_AUDIENCE=agent|human|off`; otherwise the exact agent markers
+`AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CODEX_SANDBOX_NETWORK_DISABLED`,
+`CURSOR_AGENT` and `GEMINI_CLI` select agent discovery, an interactive stderr
+selects a person, and anything else stays quiet. An agent host without one of
+these markers should set `HRANESS_AUDIENCE=agent`. Human mode also requires
+interactive stderr. CI and `HRANESS_SUPPORT=off` always suppress incidental
+work. Audience off, quiet and invalid values suppress skill offer claims too.
+Explicit support and protocol requests remain available. `dismiss`, `snooze`,
+`enable` and `status` print JSON for a detected agent or with `--json`.
 
 Keep support invitations in the skill for the product being used. Generic
 engineering, research and orchestration skills should not acquire a hidden

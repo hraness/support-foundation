@@ -172,7 +172,9 @@ function audience(options: SupportCommandOptions, stderr: SupportOutput = option
 
 function asciiOnly(env: Readonly<Record<string, string | undefined>>): boolean {
   if (env.HRANESS_ASCII === "1" || env.TERM === "dumb") return true;
-  return ![env.LC_ALL, env.LC_CTYPE, env.LANG].some(value => /utf-?8/iu.test(value ?? ""));
+  // The first nonempty of LC_ALL, LC_CTYPE, LANG is the effective character locale.
+  const locale = [env.LC_ALL, env.LC_CTYPE, env.LANG].find(value => (value ?? "") !== "") ?? "";
+  return !/utf-?8/iu.test(locale);
 }
 
 function symbols(text: string, options: SupportCommandOptions): string {

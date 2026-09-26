@@ -257,7 +257,8 @@ function audience(options, stderr = options.stderr ?? process.stderr) {
 function asciiOnly(env) {
   if (env.HRANESS_ASCII === "1" || env.TERM === "dumb")
     return true;
-  return ![env.LC_ALL, env.LC_CTYPE, env.LANG].some((value) => /utf-?8/iu.test(value ?? ""));
+  const locale = [env.LC_ALL, env.LC_CTYPE, env.LANG].find((value) => (value ?? "") !== "") ?? "";
+  return !/utf-?8/iu.test(locale);
 }
 function symbols(text, options) {
   if (!asciiOnly(options.env ?? process.env))

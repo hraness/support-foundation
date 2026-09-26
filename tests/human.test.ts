@@ -108,6 +108,9 @@ describe("support command for people", () => {
     expect((await run(["dismiss"], { env: { LANG: "en_US.UTF-8", NO_COLOR: "1" } })).stdout).toBe("✓ Support invitations are off on this device.\n");
     expect((await run(["dismiss"], { env: { LANG: "en_US.UTF-8", TERM: "dumb" } })).stdout).toBe("OK Support invitations are off on this device.\n");
     expect((await run(["status"], { env: {} })).stdout).toBe("o Support invitations are off on this device.\n");
+    // LC_ALL overrides LANG, so a C locale stays ASCII even with a UTF-8 LANG.
+    expect((await run(["status"], { env: { LC_ALL: "C", LANG: "en_US.UTF-8" } })).stdout).toBe("o Support invitations are off on this device.\n");
+    expect((await run(["status"], { env: { LC_ALL: "", LC_CTYPE: "UTF-8", LANG: "C" } })).stdout).toBe("○ Support invitations are off on this device.\n");
     expect((await run(["enable"], { env: { LANG: "en_US.UTF-8", HRANESS_ASCII: "1" } })).stderr).toBe("Turn them off: sponge support dismiss\n");
   });
 

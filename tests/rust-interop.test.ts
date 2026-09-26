@@ -127,7 +127,7 @@ describe("Rust and JavaScript published contract interoperability", () => {
 
   test("human invitations, command copy and audience decisions match byte for byte", async () => {
     const updates = { ...profile, updates: true };
-    for (const env of [{ LANG: "en_US.UTF-8" }, { LANG: "en_US.UTF-8", TERM: "dumb" }, {}]) {
+    for (const env of [{ LANG: "en_US.UTF-8" }, { LANG: "en_US.UTF-8", TERM: "dumb" }, { LC_ALL: "C", LANG: "en_US.UTF-8" }, {}]) {
       for (const command of [prefix, ["/usr/local/bin/fixture"], []]) {
         const rustHook = await hook("rust", await directory(), { env, command, profile: updates });
         let output = "";

@@ -205,9 +205,11 @@ fn ascii_only(options: &Options) -> bool {
     let utf8 = UTF8.get_or_init(|| Regex::new(r"(?i)utf-?8").expect("constant regex"));
     env_value(options, "HRANESS_ASCII").as_deref() == Some("1")
         || env_value(options, "TERM").as_deref() == Some("dumb")
+        // The first nonempty of LC_ALL, LC_CTYPE, LANG is the effective character locale.
         || !["LC_ALL", "LC_CTYPE", "LANG"]
             .iter()
-            .any(|name| env_value(options, name).is_some_and(|value| utf8.is_match(&value)))
+            .find_map(|name| env_value(options, name).filter(|value| !value.is_empty()))
+            .is_some_and(|value| utf8.is_match(&value))
 }
 
 /// Replace CLI symbols with their ASCII fallbacks on plain terminals.

@@ -1,6 +1,6 @@
 use hraness_support_foundation::{
     create_support_offer, create_support_protocol, maybe_show_with_output, run_support_command,
-    Audience, Options, Output, SupportProfile,
+    support_menu_item, support_menu_url, Audience, Options, Output, SupportProfile,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -87,9 +87,10 @@ fn concurrent_claims_reserve_once_without_stealing_a_lock() {
 }
 
 #[test]
-fn default_pty_is_agent_and_only_accepted_human_output_commits() {
+fn agent_markers_select_discovery_and_only_accepted_human_output_commits() {
     let directory = tempfile::tempdir().unwrap();
     let mut options = options(&directory);
+    options.env = Some(BTreeMap::from([("CLAUDECODE".into(), "1".into())]));
     let buffer = Arc::new(Mutex::new(String::new()));
     let written = Arc::clone(&buffer);
     let output = Output::new(true, move |text| {
@@ -123,7 +124,7 @@ fn broken_and_late_output_never_acknowledge_or_retry_pending_writer() {
     let fail = Output::new(true, |_| Err(std::io::ErrorKind::BrokenPipe.into()));
     assert!(!maybe_show_with_output(&profile(), true, &options, &fail));
     assert!(command(&["status", "--json"], &options)["lastShownAt"].is_null());
-    command(&["enable"], &options);
+    command(&["enable", "--json"], &options);
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let count = Arc::clone(&calls);
     let (release, wait) = std::sync::mpsc::channel();
@@ -137,7 +138,7 @@ fn broken_and_late_output_never_acknowledge_or_retry_pending_writer() {
     assert!(!maybe_show_with_output(&profile(), true, &options, &slow));
     assert!(start.elapsed() < std::time::Duration::from_secs(2));
     assert!(command(&["status", "--json"], &options)["lastShownAt"].is_null());
-    command(&["enable"], &options);
+    command(&["enable", "--json"], &options);
     assert!(!maybe_show_with_output(
         &profile(),
         true,
@@ -179,4 +180,40 @@ fn state_symlinks_fifo_and_private_modes_fail_closed() {
         std::fs::metadata(state).unwrap().permissions().mode() & 0o777,
         0o600
     );
+}
+
+#[test]
+fn support_menu_row_matches_the_node_helper() {
+    assert_eq!(
+        support_menu_item(),
+        json!({"kind":"action","id":"support.open","label":"Help & support","symbol":"action.support","opens":"browser"})
+    );
+    assert_eq!(
+        support_menu_url(&profile()).unwrap(),
+        "https://account.hraness.com/support?product=fixture&source=desktop"
+    );
+}
+
+#[test]
+fn people_at_a_terminal_get_text_and_pipes_get_no_hint() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut options = options(&directory);
+    options.env = Some(BTreeMap::from([("LANG".into(), "en_US.UTF-8".into())]));
+    options.stderr_is_terminal = Some(true);
+    let args = vec!["dismiss".to_owned()];
+    let result = run_support_command(&profile(), &args, &options);
+    assert_eq!(result.exit_code, 0);
+    assert_eq!(
+        result.stdout,
+        "✓ Support invitations are off on this device.\n"
+    );
+    assert_eq!(result.stderr, "Turn them back on: fixture support enable\n");
+    options.stderr_is_terminal = Some(false);
+    let result = run_support_command(&profile(), &args, &options);
+    assert_eq!(result.stderr, "");
+    let help = run_support_command(&profile(), &["--help".to_owned()], &options);
+    assert_eq!(help.exit_code, 0);
+    assert!(help
+        .stdout
+        .starts_with("Usage: fixture support [command]\n"));
 }

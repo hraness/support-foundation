@@ -23,7 +23,8 @@ async function rust(path: string, args: string[], overrides: Override = {}) {
   return JSON.parse(stdout);
 }
 async function js(path: string, args: string[], overrides: SupportCommandOptions = {}) {
-  return runSupportCommand(profile, args, { command: prefix, stateDirectory: path, env: {}, now: clock, gitEmail: false, ...overrides });
+  return runSupportCommand(profile, args, { command: prefix, stateDirectory: path, env: {}, now: clock, gitEmail: false,
+    stderr: { isTTY: false, write: () => true }, ...overrides });
 }
 async function body(engine: typeof rust | typeof js, path: string, args: string[], options = {}) {
   const result = await engine(path, args, options); expect(result.exitCode).toBe(0); expect(result.stderr).toBe(""); return JSON.parse(result.stdout);
@@ -69,12 +70,12 @@ describe("Rust and JavaScript published contract interoperability", () => {
 
     test(`${label}: preferences and explicit requests share state`, async () => {
       const path = await directory();
-      expect(await body(first, path, ["dismiss"])).toEqual(await body(second, await directory(), ["dismiss"]));
+      expect(await body(first, path, ["dismiss", "--json"])).toEqual(await body(second, await directory(), ["dismiss", "--json"]));
       expect((await body(second, path, ["offer", "--json"])).reason).toBe("dismissed");
       expect((await body(second, path, ["--json"])).optional).toBe(true);
-      await body(second, path, ["enable"]); await body(first, path, ["snooze"]);
+      await body(second, path, ["enable", "--json"]); await body(first, path, ["snooze", "--json"]);
       expect((await body(second, path, ["offer", "--json"])).reason).toBe("snoozed");
-      await body(second, path, ["enable"]);
+      await body(second, path, ["enable", "--json"]);
       expect((await body(first, path, ["offer", "--json"])).kind).toBe("offer");
     });
   }
@@ -86,14 +87,15 @@ describe("Rust and JavaScript published contract interoperability", () => {
     expect(results.every(result => result.kind === "offer" || ["busy", "reserved"].includes(result.reason))).toBe(true);
   });
 
-  test("default agent discovery is shared across runtimes and never records presentation", async () => {
+  test("agent discovery is shared across runtimes and never records presentation", async () => {
+    const env = { CLAUDECODE: "1" };
     for (const [first, second] of [["rust", "js"], ["js", "rust"]] as const) {
       const path = await directory();
-      const result = await hook(first, path); expect(result.shown).toBe(true);
-      expect(JSON.parse(result.output)).toEqual(JSON.parse((await hook(second, await directory())).output));
-      expect((await hook(second, path)).shown).toBe(false);
+      const result = await hook(first, path, { env }); expect(result.shown).toBe(true);
+      expect(JSON.parse(result.output)).toEqual(JSON.parse((await hook(second, await directory(), { env })).output));
+      expect((await hook(second, path, { env })).shown).toBe(false);
       expect((await body(rust, path, ["status", "--json"])).lastShownAt).toBeNull();
-      expect((await hook(second, path, { now: clock + 600000 })).shown).toBe(true);
+      expect((await hook(second, path, { env, now: clock + 600000 })).shown).toBe(true);
       expect((await body(js, path, ["offer", "--json"])).kind).toBe("offer");
     }
   });
@@ -119,9 +121,47 @@ describe("Rust and JavaScript published contract interoperability", () => {
       expect(await readFile(join(path, name), "utf8")).toBe(data);
     }
     const path = await directory(); await writeFile(join(path, "discovery.json"), "{}");
-    expect((await hook("rust", path)).shown).toBe(false);
-    expect((await hook("js", path)).shown).toBe(false);
+    expect((await hook("rust", path, { env: { AI_AGENT: "x" } })).shown).toBe(false);
+    expect((await hook("js", path, { env: { AI_AGENT: "x" } })).shown).toBe(false);
   });
+
+  test("human invitations, command copy and audience decisions match byte for byte", async () => {
+    const updates = { ...profile, updates: true };
+    for (const env of [{ LANG: "en_US.UTF-8" }, { LANG: "en_US.UTF-8", TERM: "dumb" }, {}]) {
+      for (const command of [prefix, ["/usr/local/bin/fixture"], []]) {
+        const rustHook = await hook("rust", await directory(), { env, command, profile: updates });
+        let output = "";
+        const shown = await maybeShowSupportInvitation(updates, { usefulResult: true, command, stateDirectory: await directory(), env, now: clock, gitEmail: false,
+          stderr: { isTTY: true, write: (text: string) => { output += text; } } });
+        expect(rustHook).toEqual({ shown, output });
+      }
+    }
+    for (const env of [{ LANG: "C.UTF-8" }, { HRANESS_ASCII: "1", LANG: "C.UTF-8" }, { CLAUDECODE: "1" }, { HRANESS_AUDIENCE: "agent" }]) {
+      for (const stderrTty of [false, true]) {
+        for (const command of [prefix, []]) {
+          const path = await directory();
+          const jsPath = await directory();
+          const both = async (args: string[], extra: Override = {}) => {
+            const fromRust = await rust(path, args, { env, command, stderrIsTty: stderrTty, ...extra });
+            const fromJs = await runSupportCommand(profile, args, { command, stateDirectory: jsPath, env, now: clock, gitEmail: false,
+              stderr: { isTTY: stderrTty, write: () => true }, ...(extra.now === undefined ? {} : { now: extra.now as number }) });
+            // serde_json sorts object keys, so JSON bodies compare as values.
+            const normal = (result: { stdout: string }) => ({ ...result, stdout: result.stdout.startsWith("{") ? JSON.parse(result.stdout) : result.stdout });
+            expect(normal(fromRust)).toEqual(normal(fromJs));
+            return fromJs;
+          };
+          for (const args of [["status"], ["dismiss"], ["status"], ["snooze"], ["status"], ["enable"], ["status"], ["--help"], ["-h"], ["help"], ["nope", "x\u0007y"], ["status", "extra"]]) {
+            await both(args);
+          }
+          for (const [engine, where] of [[js, jsPath], [rust, path]] as const) {
+            const offer = await body(engine, where, ["offer", "--json"], { command });
+            await body(engine, where, ["shown", offer.invitation.id], { command, now: clock + 1 });
+          }
+          await both(["status"], { now: clock + 3 });
+        }
+      }
+    }
+  }, 60_000);
 
   test("numeric JSON spelling retains JavaScript acknowledgement semantics", async () => {
     const path = await directory(); const id = "11111111-1111-4111-8111-111111111111";

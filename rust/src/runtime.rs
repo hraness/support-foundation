@@ -1,7 +1,7 @@
 use crate::{
-    audience, create_support_offer, create_support_protocol, duration, env_value, js_trim, now,
-    render_offer, schema, state, suppressed, Audience, CommandResult, Options, SupportError,
-    SupportProfile,
+    audience, command_text, create_support_offer, create_support_protocol, duration, env_value,
+    human_copy, iso_date, js_trim, now, render_offer, schema, state, support_line, suppressed,
+    symbols, Audience, CommandResult, Options, SupportError, SupportProfile,
 };
 use regex::Regex;
 use serde_json::{json, Value};
@@ -97,6 +97,46 @@ fn unavailable(error: state::StateError) -> CommandResult {
         &format!("Support preferences are unavailable ({}).", error.reason()),
         1,
     )
+}
+
+/// Human text on stdout; the hint goes to stderr only for a person at a terminal.
+fn said(line: String, hint: Option<String>, role: Audience) -> CommandResult {
+    CommandResult {
+        exit_code: 0,
+        stdout: format!("{line}\n"),
+        stderr: match (hint, role) {
+            (Some(hint), Audience::Human) => format!("{hint}\n"),
+            _ => String::new(),
+        },
+    }
+}
+
+fn human_unavailable(
+    error: &state::StateError,
+    profile: &SupportProfile,
+    options: &Options,
+) -> CommandResult {
+    let key = if error.reason() == "busy" {
+        "busy"
+    } else {
+        "unavailable"
+    };
+    failure(&support_line(human_copy(key), profile, options, &[]), 1)
+}
+
+fn argument_text(value: &str) -> String {
+    static UNSAFE: OnceLock<Regex> = OnceLock::new();
+    let visible: String = UNSAFE
+        .get_or_init(|| Regex::new(r"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]").expect("constant regex"))
+        .replace_all(value, "")
+        .chars()
+        .take(40)
+        .collect();
+    if visible.is_empty() {
+        "?".to_owned()
+    } else {
+        visible
+    }
 }
 
 fn email_candidate(text: &str) -> Option<String> {
@@ -226,8 +266,23 @@ fn command(
             "cli"
         },
     )?;
+    let human = |key: &str, values: &[(&str, &str)]| {
+        support_line(human_copy(key), profile, options, values)
+    };
+    let stderr_is_terminal = options
+        .stderr_is_terminal
+        .unwrap_or_else(|| std::io::stderr().is_terminal());
     let result = match args.as_slice() {
-        [] => CommandResult { exit_code:0, stdout:render_offer(&with_email(offer, options)), stderr:String::new() },
+        [] => CommandResult {
+            exit_code: 0,
+            stdout: render_offer(&with_email(offer, options)),
+            stderr: String::new(),
+        },
+        ["-h" | "--help" | "help"] => CommandResult {
+            exit_code: 0,
+            stdout: format!("{}\n", human("help", &[])),
+            stderr: String::new(),
+        },
         ["--json"] => success(with_email(offer, options)),
         ["offer", "--json"] => success(match state::claim(options) {
             state::Claim::Offer(id) => {
@@ -235,16 +290,24 @@ fn command(
                 invitation["id"] = json!(id);
                 json!({"schemaVersion":schema("RESULT_SCHEMA"),"kind":"offer","invitation":invitation})
             }
-            state::Claim::Quiet(reason) => json!({"schemaVersion":schema("RESULT_SCHEMA"),"kind":"quiet","reason":reason}),
+            state::Claim::Quiet(reason) => {
+                json!({"schemaVersion":schema("RESULT_SCHEMA"),"kind":"quiet","reason":reason})
+            }
         }),
         [action @ ("shown" | "release"), id] => {
-            if !state::valid_id(id) { return Ok(failure("Support invitation is invalid or expired.", 2)); }
+            if !state::valid_id(id) {
+                return Ok(failure("Support invitation is invalid or expired.", 2));
+            }
             let result = if *action == "shown" {
                 let time = now(options)?;
-                state::with_state(options, |state, directory| state::acknowledge(state, directory, id, time))
+                state::with_state(options, |state, directory| {
+                    state::acknowledge(state, directory, id, time)
+                })
             } else {
                 state::with_state(options, |state, _| {
-                    if state["reservation"]["id"] != *id { return Ok((false, false)); }
+                    if state["reservation"]["id"] != *id {
+                        return Ok((false, false));
+                    }
                     state["reservation"] = Value::Null;
                     Ok((true, true))
                 })
@@ -252,34 +315,124 @@ fn command(
             match result {
                 Err(error) => unavailable(error),
                 Ok(false) => failure("Support invitation is invalid or expired.", 2),
-                Ok(true) => success(json!({"schemaVersion":schema("RESULT_SCHEMA"),"kind":if *action == "shown" { "shown" } else { "released" }})),
+                Ok(true) => success(
+                    json!({"schemaVersion":schema("RESULT_SCHEMA"),"kind":if *action == "shown" { "shown" } else { "released" }}),
+                ),
             }
         }
-        ["status", "--json"] => match state::with_state(options, |state, _| Ok((json!({
-            "schemaVersion":schema("RESULT_SCHEMA"),"kind":"status","environmentSuppressed":suppressed(options),
-            "optedOut":state["optedOut"],"snoozedUntil":state["snoozedUntil"],"lastShownAt":state["lastShownAt"],
-            "cooldownUntil":state::timestamp(&state["lastShownAt"]).map(|t| t as f64 + duration("WEEK_MS") as f64),
-            "reservationExpiresAt":state["reservation"]["expiresAt"],
-        }), false))) { Ok(value) => success(value), Err(error) => unavailable(error) },
-        [action @ ("dismiss" | "snooze" | "enable")] => {
+        [action @ ("status" | "dismiss" | "snooze" | "enable")]
+        | [action @ ("status" | "dismiss" | "snooze" | "enable"), "--json"] => {
+            // `--json` always wins; otherwise agents keep JSON and people get one line.
+            let role = audience(options, stderr_is_terminal);
+            let json_output = args.len() == 2 || matches!(role, Audience::Agent);
             let time = now(options)?;
-            match state::with_state(options, |state, _| {
-                state["reservation"] = Value::Null;
-                match *action {
-                    "dismiss" => state["optedOut"] = json!(true),
-                    "snooze" => state["snoozedUntil"] = json!(time + duration("SNOOZE_MS")),
-                    _ => { state["optedOut"] = json!(false); state["snoozedUntil"] = Value::Null; }
+            if *action == "status" {
+                let environment = suppressed(options);
+                match state::with_state(options, |state, _| Ok((state.clone(), false))) {
+                    Err(error) if json_output => unavailable(error),
+                    Err(error) => human_unavailable(&error, profile, options),
+                    Ok(state) if json_output => success(json!({
+                        "schemaVersion":schema("RESULT_SCHEMA"),"kind":"status","environmentSuppressed":environment,
+                        "optedOut":state["optedOut"],"snoozedUntil":state["snoozedUntil"],"lastShownAt":state["lastShownAt"],
+                        "cooldownUntil":state::timestamp(&state["lastShownAt"]).map(|t| t as f64 + duration("WEEK_MS") as f64),
+                        "reservationExpiresAt":state["reservation"]["expiresAt"],
+                    })),
+                    Ok(state) => {
+                        let snoozed =
+                            state::timestamp(&state["snoozedUntil"]).filter(|until| time < *until);
+                        let cooldown = state::timestamp(&state["lastShownAt"])
+                            .map(|shown| shown + duration("WEEK_MS"))
+                            .filter(|until| time < *until);
+                        if environment {
+                            said(human("statusEnvironment", &[]), None, role)
+                        } else if state["optedOut"] == json!(true) {
+                            said(
+                                human("statusOff", &[]),
+                                Some(human("hintEnable", &[])),
+                                role,
+                            )
+                        } else if let Some(until) = snoozed {
+                            said(
+                                human("statusSnoozed", &[("date", &iso_date(until))]),
+                                Some(human("hintEnable", &[])),
+                                role,
+                            )
+                        } else if let Some(until) = cooldown {
+                            said(
+                                human("statusCooldown", &[("date", &iso_date(until))]),
+                                Some(human("hintDismiss", &[])),
+                                role,
+                            )
+                        } else {
+                            said(
+                                human("statusOn", &[]),
+                                Some(human("hintDismiss", &[])),
+                                role,
+                            )
+                        }
+                    }
                 }
-                Ok((json!({"schemaVersion":schema("RESULT_SCHEMA"),"kind":match *action { "dismiss"=>"dismissed", "snooze"=>"snoozed", _=>"enabled" }}), true))
-            }) { Ok(value) => success(value), Err(error) => unavailable(error) }
+            } else {
+                match state::with_state(options, |state, _| {
+                    state["reservation"] = Value::Null;
+                    match *action {
+                        "dismiss" => state["optedOut"] = json!(true),
+                        "snooze" => state["snoozedUntil"] = json!(time + duration("SNOOZE_MS")),
+                        _ => {
+                            state["optedOut"] = json!(false);
+                            state["snoozedUntil"] = Value::Null;
+                        }
+                    }
+                    Ok((
+                        json!({"schemaVersion":schema("RESULT_SCHEMA"),"kind":match *action { "dismiss"=>"dismissed", "snooze"=>"snoozed", _=>"enabled" }}),
+                        true,
+                    ))
+                }) {
+                    Err(error) if json_output => unavailable(error),
+                    Err(error) => human_unavailable(&error, profile, options),
+                    Ok(value) if json_output => success(value),
+                    Ok(_) => match *action {
+                        "dismiss" => said(
+                            human("dismissed", &[]),
+                            Some(human("hintEnable", &[])),
+                            role,
+                        ),
+                        "snooze" => {
+                            said(human("snoozed", &[]), Some(human("hintEnable", &[])), role)
+                        }
+                        _ => said(human("enabled", &[]), Some(human("hintDismiss", &[])), role),
+                    },
+                }
+            }
         }
-        _ => failure("Usage: support [--json | protocol --json | offer --json | shown <id> | release <id> | dismiss | snooze | enable | status --json]", 2),
+        _ => failure(
+            &human("unknown", &[("argument", &argument_text(&args.join(" ")))]),
+            2,
+        ),
     };
     Ok(result)
 }
 
+/// The incidental human invitation: a rule, the offer, and how to hide these.
+fn render_invitation(profile: &SupportProfile, offer: &Value, options: &Options) -> String {
+    let opt_out = if command_text(options).is_empty() {
+        human_copy("optOutEnvironment")
+    } else {
+        human_copy("optOut")
+    };
+    format!(
+        "{}{}\n",
+        symbols(
+            &format!("\n{}\n{}", human_copy("rule"), render_offer(offer)),
+            options
+        ),
+        support_line(opt_out, profile, options, &[])
+    )
+}
+
 /// Call once after useful success, never probes, help, unattended or failed work.
-/// Unknown callers receive protocol discovery even in a PTY. Nothing uses stdout.
+/// People at an interactive stderr get the human invitation, detected agents
+/// get one discovery line, and everyone else gets nothing. Nothing uses stdout.
 pub fn maybe_show_support_invitation(
     profile: &SupportProfile,
     useful_result: bool,
@@ -297,7 +450,7 @@ pub fn maybe_show_with_output(
     if !useful_result || suppressed(options) {
         return false;
     }
-    match audience(options) {
+    match audience(options, output.is_tty) {
         Audience::Off => false,
         Audience::Agent => {
             let Ok(protocol) = create_support_protocol(profile, &options.command) else {
@@ -325,7 +478,7 @@ pub fn maybe_show_with_output(
             let state::Claim::Offer(id) = state::claim(options) else {
                 return false;
             };
-            let message = render_offer(&with_email(offer, options));
+            let message = render_invitation(profile, &with_email(offer, options), options);
             state::present(options, &id, || output.write(message))
         }
     }

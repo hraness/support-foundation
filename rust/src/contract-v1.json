@@ -97,5 +97,48 @@
     "updatesLabel": "Get free PRODUCT_NAME product updates",
     "emailSuggestion": "Suggested email from Git: EMAIL_ADDRESS. You can use it, change it, or skip updates.",
     "payment": "Payment is optional. Review any recurring price and confirm in your browser."
+  },
+  "human": {
+    "rule": "────────────────────────────────────────",
+    "optOut": "Hide these: {command} support dismiss · Ask again in 30 days: {command} support snooze",
+    "optOutEnvironment": "Hide these: set HRANESS_SUPPORT=off",
+    "help": "Usage: {command} support [command]\n\nSee optional product updates and paid support for {product}.\n\nCommands\n  (none)      Show the links for updates and support\n  status      Show whether invitations are on\n  dismiss     Stop showing invitations on this device\n  snooze      Hide invitations for 30 days\n  enable      Show invitations again\n\nOptions\n  --json      Print machine-readable output\n  -h, --help  Show this help",
+    "dismissed": "✓ Support invitations are off on this device.",
+    "snoozed": "✓ Support invitations are hidden for 30 days.",
+    "enabled": "✓ Support invitations are on. You'll see at most one a week.",
+    "statusOn": "● Support invitations are on. You'll see at most one a week.",
+    "statusCooldown": "● Support invitations are on. The next one can appear after {date}.",
+    "statusSnoozed": "○ Support invitations are hidden until {date}.",
+    "statusOff": "○ Support invitations are off on this device.",
+    "statusEnvironment": "○ Support invitations are turned off in this environment.",
+    "hintEnable": "Turn them back on: {command} support enable",
+    "hintDismiss": "Turn them off: {command} support dismiss",
+    "busy": "✗ Another support command is running. Try again in a moment.",
+    "unavailable": "✗ Couldn't read or save support preferences on this device.\n→ Try again, or set HRANESS_SUPPORT=off to hide invitations.",
+    "unknown": "✗ Unknown support command \"{argument}\".\n→ {command} support --help"
+  },
+  "asciiSymbols": {
+    "✓": "OK",
+    "✗": "FAIL",
+    "→": "->",
+    "●": "*",
+    "○": "o",
+    "─": "-",
+    "·": "-"
+  },
+  "agentMarkers": [
+    "AI_AGENT",
+    "CLAUDECODE",
+    "CODEX_SANDBOX",
+    "CODEX_SANDBOX_NETWORK_DISABLED",
+    "CURSOR_AGENT",
+    "GEMINI_CLI"
+  ],
+  "menuItem": {
+    "kind": "action",
+    "id": "support.open",
+    "label": "Help & support",
+    "symbol": "action.support",
+    "opens": "browser"
   }
 }

@@ -59,6 +59,76 @@ function renderSupportOffer(offer) {
 `) + `
 `;
 }
+var SUPPORT_HUMAN_COPY = Object.freeze({
+  rule: "─".repeat(40),
+  optOut: "Hide these: {command} support dismiss · Ask again in 30 days: {command} support snooze",
+  optOutEnvironment: "Hide these: set HRANESS_SUPPORT=off",
+  help: [
+    "Usage: {command} support [command]",
+    "",
+    "See optional product updates and paid support for {product}.",
+    "",
+    "Commands",
+    "  (none)      Show the links for updates and support",
+    "  status      Show whether invitations are on",
+    "  dismiss     Stop showing invitations on this device",
+    "  snooze      Hide invitations for 30 days",
+    "  enable      Show invitations again",
+    "",
+    "Options",
+    "  --json      Print machine-readable output",
+    "  -h, --help  Show this help"
+  ].join(`
+`),
+  dismissed: "✓ Support invitations are off on this device.",
+  snoozed: "✓ Support invitations are hidden for 30 days.",
+  enabled: "✓ Support invitations are on. You'll see at most one a week.",
+  statusOn: "● Support invitations are on. You'll see at most one a week.",
+  statusCooldown: "● Support invitations are on. The next one can appear after {date}.",
+  statusSnoozed: "○ Support invitations are hidden until {date}.",
+  statusOff: "○ Support invitations are off on this device.",
+  statusEnvironment: "○ Support invitations are turned off in this environment.",
+  hintEnable: "Turn them back on: {command} support enable",
+  hintDismiss: "Turn them off: {command} support dismiss",
+  busy: "✗ Another support command is running. Try again in a moment.",
+  unavailable: `✗ Couldn't read or save support preferences on this device.
+→ Try again, or set HRANESS_SUPPORT=off to hide invitations.`,
+  unknown: `✗ Unknown support command "{argument}".
+→ {command} support --help`
+});
+var SUPPORT_ASCII_SYMBOLS = Object.freeze({
+  "✓": "OK",
+  "✗": "FAIL",
+  "→": "->",
+  "●": "*",
+  "○": "o",
+  "─": "-",
+  "·": "-"
+});
+var ACTION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+function supportMenuItem(options = {}) {
+  const id = options.id ?? "support.open";
+  const alternate = options.alternate;
+  if (!ACTION_ID.test(id) || id.startsWith("foundation.") || alternate !== undefined && (!ACTION_ID.test(alternate.id) || alternate.id === id || alternate.id.startsWith("foundation.") || !plainText(alternate.label, 48) || alternate.symbol !== undefined && alternate.symbol !== "action.copy")) {
+    throw new TypeError("Invalid support menu item options.");
+  }
+  return Object.freeze({
+    kind: "action",
+    id,
+    label: "Help & support",
+    symbol: "action.support",
+    opens: "browser",
+    ...alternate === undefined ? {} : {
+      alternate: Object.freeze({ id: alternate.id, label: alternate.label, ...alternate.symbol === undefined ? {} : { symbol: alternate.symbol } })
+    }
+  });
+}
+function supportMenuUrl(profile) {
+  const offer = createSupportOffer(profile, "desktop");
+  const url = new URL(offer.actions[0].url);
+  url.hash = "";
+  return url.href;
+}
 function createSupportProtocol(profile, options) {
   const command = options.command;
   if (!Array.isArray(command) || command.length < 1 || command.length > 8 || !Array.from(command).every((part) => plainText(part, 240))) {
@@ -151,7 +221,10 @@ function stateDirectory(options) {
 }
 function environmentSuppresses(options) {
   const env = options.env ?? process.env;
-  if (audience(options) === "off")
+  if (explicitAudience(options) === "off")
+    return true;
+  const legacy = env.HRANESS_SUPPORT_AUDIENCE;
+  if (options.audience === undefined && legacy !== undefined && legacy !== "agent" && legacy !== "human")
     return true;
   if (["off", "false", "0"].includes(env.HRANESS_SUPPORT?.trim().toLowerCase() ?? ""))
     return true;
@@ -160,11 +233,49 @@ function environmentSuppresses(options) {
     return value !== undefined && value !== "" && value !== "false" && value !== "0";
   });
 }
-function audience(options) {
-  const value = options.audience ?? (options.env ?? process.env).HRANESS_SUPPORT_AUDIENCE;
-  if (value === undefined)
+var AGENT_MARKERS = ["AI_AGENT", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CURSOR_AGENT", "GEMINI_CLI"];
+function explicitAudience(options) {
+  const role = (value) => value === "agent" || value === "human" ? value : "off";
+  if (options.audience !== undefined)
+    return role(options.audience);
+  const env = options.env ?? process.env;
+  const shared = env.HRANESS_AUDIENCE;
+  if (shared === "human" || shared === "agent" || shared === "quiet" || shared === "off")
+    return role(shared);
+  const legacy = env.HRANESS_SUPPORT_AUDIENCE;
+  return legacy === undefined ? undefined : role(legacy);
+}
+function audience(options, stderr = options.stderr ?? process.stderr) {
+  const explicit = explicitAudience(options);
+  if (explicit !== undefined)
+    return explicit;
+  const env = options.env ?? process.env;
+  if (AGENT_MARKERS.some((name) => (env[name] ?? "") !== ""))
     return "agent";
-  return value === "agent" || value === "human" || value === "off" ? value : "off";
+  return stderr.isTTY === true ? "human" : "off";
+}
+function asciiOnly(env) {
+  if (env.HRANESS_ASCII === "1" || env.TERM === "dumb")
+    return true;
+  return ![env.LC_ALL, env.LC_CTYPE, env.LANG].some((value) => /utf-?8/iu.test(value ?? ""));
+}
+function symbols(text, options) {
+  if (!asciiOnly(options.env ?? process.env))
+    return text;
+  return Array.from(text, (character) => SUPPORT_ASCII_SYMBOLS[character] ?? character).join("");
+}
+function commandText(options) {
+  const command = options.command ?? [];
+  return command.map((part, index) => index === 0 ? part.split(/[\\/]/u).at(-1) : part).join(" ");
+}
+function fill(template, values) {
+  return (values.command === "" ? template.replaceAll("{command} ", "") : template).replace(/\{(command|product|date|argument)\}/gu, (match, key) => values[key] ?? match);
+}
+function isoDate(epochMs) {
+  return new Date(epochMs).toISOString().slice(0, 10);
+}
+function supportLine(template, profile, options, values = {}) {
+  return symbols(fill(template, { command: commandText(options), product: profile.name, ...values }), options);
 }
 async function withGitEmailSuggestion(offer, options) {
   const env = options.env ?? process.env;
@@ -382,14 +493,33 @@ function failure(message, exitCode = 1) {
   return { exitCode, stdout: "", stderr: `${message}
 ` };
 }
+function said(line, hint, role) {
+  return { exitCode: 0, stdout: `${line}
+`, stderr: hint !== undefined && role === "human" ? `${hint}
+` : "" };
+}
+function stateFailure(reason, jsonOutput, human) {
+  if (jsonOutput)
+    return failure(`Support preferences are unavailable (${reason}).`);
+  return failure(human(reason === "busy" ? SUPPORT_HUMAN_COPY.busy : SUPPORT_HUMAN_COPY.unavailable));
+}
+function argumentText(value) {
+  const visible = Array.from(value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "")).slice(0, 40).join("");
+  return visible === "" ? "?" : visible;
+}
 async function runSupportCommand(profile, args = [], options = {}) {
   try {
     if (args.length === 2 && args[0] === "protocol" && args[1] === "--json") {
       return success(createSupportProtocol(profile, { command: options.command ?? [] }));
     }
     const offer = createSupportOffer(profile, args[0] === "offer" ? "agent" : "cli");
+    const human = (template, values) => supportLine(template, profile, options, values);
     if (args.length === 0)
       return { exitCode: 0, stdout: renderSupportOffer(await withGitEmailSuggestion(offer, options)), stderr: "" };
+    if (args.length === 1 && ["-h", "--help", "help"].includes(args[0])) {
+      return { exitCode: 0, stdout: `${human(SUPPORT_HUMAN_COPY.help)}
+`, stderr: "" };
+    }
     if (args.length === 1 && args[0] === "--json")
       return success(await withGitEmailSuggestion(offer, options));
     if (args.length === 2 && args[0] === "offer" && args[1] === "--json") {
@@ -416,21 +546,42 @@ async function runSupportCommand(profile, args = [], options = {}) {
         return failure("Support invitation is invalid or expired.", 2);
       return success({ schemaVersion: RESULT_SCHEMA, kind: "released" });
     }
-    if (args.length === 2 && args[0] === "status" && args[1] === "--json") {
-      const result = await withState(options, (state) => ({ value: {
-        schemaVersion: RESULT_SCHEMA,
-        kind: "status",
-        environmentSuppressed: environmentSuppresses(options),
-        optedOut: state.optedOut,
-        snoozedUntil: state.snoozedUntil,
-        lastShownAt: state.lastShownAt,
-        cooldownUntil: state.lastShownAt === null ? null : state.lastShownAt + WEEK_MS,
-        reservationExpiresAt: state.reservation?.expiresAt ?? null
-      } }));
-      return result.ok ? success(result.value) : failure(`Support preferences are unavailable (${result.reason}).`);
-    }
     const command = args[0];
-    if (args.length === 1 && (command === "dismiss" || command === "snooze" || command === "enable")) {
+    const flagged = args.length === 2 && args[1] === "--json";
+    if ((args.length === 1 || flagged) && (command === "status" || command === "dismiss" || command === "snooze" || command === "enable")) {
+      const role = audience(options);
+      const jsonOutput = flagged || role === "agent";
+      if (command === "status") {
+        const now2 = currentTime(options);
+        const suppressed = environmentSuppresses(options);
+        const result2 = await withState(options, (state2) => ({ value: state2 }));
+        if (!result2.ok)
+          return stateFailure(result2.reason, jsonOutput, human);
+        const state = result2.value;
+        if (jsonOutput) {
+          return success({
+            schemaVersion: RESULT_SCHEMA,
+            kind: "status",
+            environmentSuppressed: suppressed,
+            optedOut: state.optedOut,
+            snoozedUntil: state.snoozedUntil,
+            lastShownAt: state.lastShownAt,
+            cooldownUntil: state.lastShownAt === null ? null : state.lastShownAt + WEEK_MS,
+            reservationExpiresAt: state.reservation?.expiresAt ?? null
+          });
+        }
+        if (suppressed)
+          return said(human(SUPPORT_HUMAN_COPY.statusEnvironment), undefined, role);
+        if (state.optedOut)
+          return said(human(SUPPORT_HUMAN_COPY.statusOff), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+        if (state.snoozedUntil !== null && now2 < state.snoozedUntil) {
+          return said(human(SUPPORT_HUMAN_COPY.statusSnoozed, { date: isoDate(state.snoozedUntil) }), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+        }
+        if (state.lastShownAt !== null && now2 < state.lastShownAt + WEEK_MS) {
+          return said(human(SUPPORT_HUMAN_COPY.statusCooldown, { date: isoDate(state.lastShownAt + WEEK_MS) }), human(SUPPORT_HUMAN_COPY.hintDismiss), role);
+        }
+        return said(human(SUPPORT_HUMAN_COPY.statusOn), human(SUPPORT_HUMAN_COPY.hintDismiss), role);
+      }
       const now = currentTime(options);
       const result = await withState(options, (state) => {
         state.reservation = null;
@@ -444,9 +595,17 @@ async function runSupportCommand(profile, args = [], options = {}) {
         }
         return { value: { schemaVersion: RESULT_SCHEMA, kind: command === "dismiss" ? "dismissed" : command === "snooze" ? "snoozed" : "enabled" }, changed: true };
       });
-      return result.ok ? success(result.value) : failure(`Support preferences are unavailable (${result.reason}).`);
+      if (!result.ok)
+        return stateFailure(result.reason, jsonOutput, human);
+      if (jsonOutput)
+        return success(result.value);
+      if (command === "dismiss")
+        return said(human(SUPPORT_HUMAN_COPY.dismissed), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+      if (command === "snooze")
+        return said(human(SUPPORT_HUMAN_COPY.snoozed), human(SUPPORT_HUMAN_COPY.hintEnable), role);
+      return said(human(SUPPORT_HUMAN_COPY.enabled), human(SUPPORT_HUMAN_COPY.hintDismiss), role);
     }
-    return failure("Usage: support [--json | protocol --json | offer --json | shown <id> | release <id> | dismiss | snooze | enable | status --json]", 2);
+    return failure(human(SUPPORT_HUMAN_COPY.unknown, { argument: argumentText(args.join(" ")) }), 2);
   } catch {
     return failure("Support configuration is invalid or unavailable.", 2);
   }
@@ -503,10 +662,17 @@ async function writeOutput(sink, message) {
     }
   });
 }
+function renderInvitation(profile, offer, options) {
+  const optOut = commandText(options) === "" ? SUPPORT_HUMAN_COPY.optOutEnvironment : SUPPORT_HUMAN_COPY.optOut;
+  return symbols(`
+${SUPPORT_HUMAN_COPY.rule}
+${renderSupportOffer(offer)}`, options) + `${supportLine(optOut, profile, options)}
+`;
+}
 async function maybeShowSupportInvitation(profile, options) {
   try {
     const stderr = options.stderr ?? process.stderr;
-    const target = audience(options);
+    const target = audience(options, stderr);
     if (!options.usefulResult || target === "off" || environmentSuppresses(options))
       return false;
     if (target === "agent") {
@@ -527,7 +693,7 @@ async function maybeShowSupportInvitation(profile, options) {
     const claim = await claimInvitation(options);
     if (claim.kind !== "offer")
       return false;
-    const message = renderSupportOffer(await withGitEmailSuggestion(offer, options));
+    const message = renderInvitation(profile, await withGitEmailSuggestion(offer, options), options);
     return await presentInvitation(claim.id, message, stderr, options);
   } catch {
     return false;

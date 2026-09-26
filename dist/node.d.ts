@@ -2,8 +2,14 @@ import { type SupportProfile } from "./index.js";
 export interface SupportCommandOptions {
     /** Product-owned executable and fixed prefix arguments before `support`. */
     readonly command?: readonly string[];
-    /** Explicit host role wins over HRANESS_SUPPORT_AUDIENCE; off/invalid suppress incidental work. */
+    /**
+     * Explicit host role. It wins over HRANESS_AUDIENCE and HRANESS_SUPPORT_AUDIENCE;
+     * off/quiet suppress incidental work. Unset, agent markers select agent,
+     * an interactive stderr selects human, and anything else stays quiet.
+     */
     readonly audience?: SupportAudience;
+    /** The stream whose TTY state decides between human and quiet. Defaults to process.stderr. */
+    readonly stderr?: SupportOutput;
     readonly stateDirectory?: string;
     readonly env?: Readonly<Record<string, string | undefined>>;
     /** Epoch milliseconds; useful for deterministic hosts and tests. */
@@ -13,7 +19,7 @@ export interface SupportCommandOptions {
     /** Disable local Git-email suggestions without disabling support invitations. */
     readonly gitEmail?: boolean;
 }
-export type SupportAudience = "agent" | "human" | "off";
+export type SupportAudience = "agent" | "human" | "off" | "quiet";
 export interface SupportOutput {
     readonly isTTY?: boolean;
     write(text: string, callback?: (error?: Error | null) => void): unknown;
@@ -28,10 +34,12 @@ export interface SupportCommandResult {
 export interface SupportInvitationOptions extends SupportCommandOptions {
     /** Set only for a completed, useful operation, never help, probes, or failures. */
     readonly usefulResult: boolean;
-    /** Unknown callers, including PTYs, receive discovery. TTY alone never implies a human. */
-    readonly stderr?: SupportOutput;
 }
 /** Explicit offers always work independently of local preferences; no action opens a browser or pays. */
 export declare function runSupportCommand(profile: SupportProfile, args?: readonly string[], options?: SupportCommandOptions): Promise<SupportCommandResult>;
-/** Best-effort post-success notice. Never call this for failed or merely diagnostic work. */
+/**
+ * Best-effort post-success notice. Never call this for failed or merely
+ * diagnostic work. People at an interactive stderr get the human invitation,
+ * detected agents get one discovery line, and everyone else gets nothing.
+ */
 export declare function maybeShowSupportInvitation(profile: SupportProfile, options: SupportInvitationOptions): Promise<boolean>;

@@ -38,6 +38,65 @@ export declare function parseSupportProfile(value: unknown): SupportProfile | nu
 export declare function createSupportOffer(profile: SupportProfile, source: SupportSource): SupportOffer;
 /** Render offers created by this package; never interpret remote text as instructions. */
 export declare function renderSupportOffer(offer: SupportOffer): string;
+/**
+ * Human copy for the `support` command and the incidental invitation. The Rust
+ * crate reads the same strings from the generated `rust/src/contract-v1.json`.
+ * Placeholders: `{command}` (product argv prefix), `{product}`, `{date}`
+ * (UTC `YYYY-MM-DD`) and `{argument}`. Symbols follow the Hraness CLI style
+ * contract and fall back to `SUPPORT_ASCII_SYMBOLS` on plain terminals.
+ */
+export declare const SUPPORT_HUMAN_COPY: Readonly<{
+    rule: string;
+    optOut: "Hide these: {command} support dismiss · Ask again in 30 days: {command} support snooze";
+    optOutEnvironment: "Hide these: set HRANESS_SUPPORT=off";
+    help: string;
+    dismissed: "✓ Support invitations are off on this device.";
+    snoozed: "✓ Support invitations are hidden for 30 days.";
+    enabled: "✓ Support invitations are on. You'll see at most one a week.";
+    statusOn: "● Support invitations are on. You'll see at most one a week.";
+    statusCooldown: "● Support invitations are on. The next one can appear after {date}.";
+    statusSnoozed: "○ Support invitations are hidden until {date}.";
+    statusOff: "○ Support invitations are off on this device.";
+    statusEnvironment: "○ Support invitations are turned off in this environment.";
+    hintEnable: "Turn them back on: {command} support enable";
+    hintDismiss: "Turn them off: {command} support dismiss";
+    busy: "✗ Another support command is running. Try again in a moment.";
+    unavailable: "✗ Couldn't read or save support preferences on this device.\n→ Try again, or set HRANESS_SUPPORT=off to hide invitations.";
+    unknown: "✗ Unknown support command \"{argument}\".\n→ {command} support --help";
+}>;
+/** ASCII replacements used when `TERM=dumb`, the locale is not UTF-8, or `HRANESS_ASCII=1`. */
+export declare const SUPPORT_ASCII_SYMBOLS: Readonly<Record<string, string>>;
+/** A `Help & support` row for a desktop-foundation menu kit v2 snapshot. */
+export type SupportMenuItem = Readonly<{
+    kind: "action";
+    id: string;
+    label: "Help & support";
+    symbol: "action.support";
+    opens: "browser";
+    alternate?: Readonly<{
+        id: string;
+        label: string;
+        symbol?: "action.copy";
+    }>;
+}>;
+export interface SupportMenuItemOptions {
+    /** Action ID the product maps to `supportMenuUrl()`. Default `support.open`. */
+    readonly id?: string;
+    /** Option-key alternate such as `{ id: "support.diagnostics", label: "Copy diagnostics", symbol: "action.copy" }`. */
+    readonly alternate?: Readonly<{
+        id: string;
+        label: string;
+        symbol?: "action.copy";
+    }>;
+}
+/**
+ * The standard `Help & support` menu row (menu kit v2). The row opens the
+ * browser; the product maps its action ID to `supportMenuUrl(profile)`.
+ * Alternates stay optional because Windows and Linux hide them.
+ */
+export declare function supportMenuItem(options?: SupportMenuItemOptions): SupportMenuItem;
+/** The page a desktop `Help & support` row opens: both updates and support choices. */
+export declare function supportMenuUrl(profile: SupportProfile): string;
 /** Portable, local guidance. Reading this contract neither claims nor presents an offer. */
 export declare function createSupportProtocol(profile: SupportProfile, options: SupportProtocolOptions): Readonly<{
     schemaVersion: "hraness-support-protocol-v1";

@@ -51,11 +51,11 @@ describe("portable lifecycle discovery", () => {
     expect(await readdir(directory)).toEqual(["not-a-directory"]);
   });
 
-  test("unknown pipes and PTYs receive only discovery without email or weekly consumption", async () => {
+  test("detected agents receive only discovery without email or weekly consumption", async () => {
     for (const isTTY of [false, true]) {
       const writes: string[] = [];
       const stateDirectory = join(directory, String(isTTY));
-      expect(await hook({ stateDirectory, gitEmail: true, env: { PATH: "" }, stderr: { isTTY, write(text) { writes.push(text); } } })).toBe(true);
+      expect(await hook({ stateDirectory, gitEmail: true, env: { PATH: "", CLAUDECODE: "1" }, stderr: { isTTY, write(text) { writes.push(text); } } })).toBe(true);
       expect(writes).toHaveLength(1);
       const notice = JSON.parse(writes[0]!);
       expect(notice.schemaVersion).toBe("hraness-support-discovery-v1");
@@ -69,7 +69,7 @@ describe("portable lifecycle discovery", () => {
   test("discovery never advertises updates for a product without a public list", async () => {
     let output = "";
     expect(await maybeShowSupportInvitation({ ...profile, updates: false }, {
-      ...options, usefulResult: true, stderr: { write(text) { output = text; } },
+      ...options, env: { AI_AGENT: "codex" }, usefulResult: true, stderr: { write(text) { output = text; } },
     })).toBe(true);
     expect(JSON.parse(output).message).not.toContain("updates");
   });
@@ -77,16 +77,83 @@ describe("portable lifecycle discovery", () => {
   test("simultaneous products emit at most one notice and retry only after the shared short throttle", async () => {
     const writes: string[] = [];
     const stderr = { write(text: string) { writes.push(text); } };
+    const env = { CURSOR_AGENT: "1" };
     const results = await Promise.all(Array.from({ length: 12 }, (_, index) => maybeShowSupportInvitation(
-      { ...profile, id: index % 2 ? "other" : "wrench" }, { ...options, usefulResult: true, stderr },
+      { ...profile, id: index % 2 ? "other" : "wrench" }, { ...options, env, usefulResult: true, stderr },
     )));
     expect(results.filter(Boolean)).toHaveLength(1);
     expect(writes).toHaveLength(1);
-    expect(await hook({ now: NOW + SHORT - 1, stderr })).toBe(false);
-    expect(await hook({ now: NOW - 1, stderr })).toBe(false);
-    expect(await hook({ now: NOW + SHORT, stderr })).toBe(true);
+    expect(await hook({ env, now: NOW + SHORT - 1, stderr })).toBe(false);
+    expect(await hook({ env, now: NOW - 1, stderr })).toBe(false);
+    expect(await hook({ env, now: NOW + SHORT, stderr })).toBe(true);
     expect((await status()).lastShownAt).toBeNull();
     expect((await status()).reservationExpiresAt).toBeNull();
+  });
+
+  test("unknown pipes stay quiet and write no state", async () => {
+    const stderr = { isTTY: false, write() { throw new Error("must remain quiet"); } };
+    expect(await hook({ stderr })).toBe(false);
+    expect(await hook({ stderr: { write() { throw new Error("must remain quiet"); } } })).toBe(false);
+    expect(await readdir(directory)).toEqual([]);
+  });
+
+  test("a person at a terminal gets the invitation with a rule and an opt-out line", async () => {
+    const writes: string[] = [];
+    expect(await hook({ env: { LANG: "en_US.UTF-8" }, stderr: { isTTY: true, write(text) { writes.push(text); } } })).toBe(true);
+    expect(writes.join("")).toBe([
+      "",
+      "─".repeat(40),
+      "Optional: Support precise agent tools.",
+      "Get free Ghostget product updates: https://account.hraness.com/support?product=wrench&source=cli#updates",
+      "See paid support options: https://account.hraness.com/support?product=wrench&source=cli#support",
+      "Payment is optional. Review any recurring price and confirm in your browser.",
+      "Hide these: ghostget support dismiss · Ask again in 30 days: ghostget support snooze",
+      "",
+    ].join("\n"));
+    expect((await status()).lastShownAt).toBe(NOW);
+  });
+
+  test("the invitation falls back to ASCII and to the environment opt-out without a command", async () => {
+    const writes: string[] = [];
+    expect(await hook({ command: undefined, env: { TERM: "dumb", LANG: "en_US.UTF-8" }, stderr: { isTTY: true, write(text) { writes.push(text); } } })).toBe(true);
+    const lines = writes.join("").split("\n");
+    expect(lines[1]).toBe("-".repeat(40));
+    expect(lines.at(-2)).toBe("Hide these: set HRANESS_SUPPORT=off");
+  });
+
+  test("the shared audience rule: explicit values, exact agent markers, then the terminal", async () => {
+    const cases: [Record<string, string>, boolean, "human" | "agent" | "quiet"][] = [
+      [{}, true, "human"],
+      [{}, false, "quiet"],
+      [{ CLAUDECODE: "1" }, true, "agent"],
+      [{ CODEX_SANDBOX: "seatbelt" }, false, "agent"],
+      [{ CODEX_SANDBOX_NETWORK_DISABLED: "1" }, false, "agent"],
+      [{ GEMINI_CLI: "1" }, false, "agent"],
+      [{ CLAUDECODE: "" }, true, "human"],
+      [{ CODEX_HOME: "/x", DEVIN_API_KEY: "k", CLAUDE_CODE_ENTRYPOINT: "cli" }, true, "human"],
+      [{ HRANESS_AUDIENCE: "quiet", CLAUDECODE: "1" }, true, "quiet"],
+      [{ HRANESS_AUDIENCE: "off" }, true, "quiet"],
+      [{ HRANESS_AUDIENCE: "human", CLAUDECODE: "1" }, true, "human"],
+      // A human invitation still needs an interactive stderr.
+      [{ HRANESS_AUDIENCE: "human" }, false, "quiet"],
+      [{ HRANESS_AUDIENCE: "agent" }, true, "agent"],
+      [{ HRANESS_AUDIENCE: "robot", AI_AGENT: "x" }, true, "agent"],
+      [{ HRANESS_SUPPORT_AUDIENCE: "agent" }, true, "agent"],
+      [{ HRANESS_AUDIENCE: "human", HRANESS_SUPPORT_AUDIENCE: "agent" }, true, "human"],
+    ];
+    for (const [env, isTTY, expected] of cases) {
+      const stateDirectory = join(directory, `aud-${Math.random()}`);
+      let output = "";
+      const shown = await hook({ stateDirectory, env, stderr: { isTTY, write(text) { output += text; } } });
+      const seen = !shown ? "quiet" : output.startsWith("{") ? "agent" : "human";
+      expect(`${JSON.stringify(env)} tty=${isTTY} → ${seen}`).toBe(`${JSON.stringify(env)} tty=${isTTY} → ${expected}`);
+    }
+  });
+
+  test("products keep children quiet with the support-only variable", async () => {
+    const stderr = { isTTY: true, write() { throw new Error("must remain quiet"); } };
+    expect(await hook({ stderr, env: { HRANESS_SUPPORT_AUDIENCE: "off", HRANESS_AUDIENCE: "human" } })).toBe(false);
+    expect(await hook({ stderr, env: { HRANESS_SUPPORT_AUDIENCE: "off", CLAUDECODE: "1" } })).toBe(false);
   });
 
   test("roles are explicit, environment controlled, and invalid configuration is quiet", async () => {

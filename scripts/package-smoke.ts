@@ -56,8 +56,11 @@ const options = {command:['ghostget'],stateDirectory:${JSON.stringify(join(scrat
 const protocol = await runSupportCommand(profile,['protocol','--json'],options);
 assert.equal(JSON.parse(protocol.stdout).schemaVersion,'hraness-support-protocol-v1');
 const writes=[];
-assert.equal(await maybeShowSupportInvitation(profile,{...options,usefulResult:true,stderr:{isTTY:true,write(text){writes.push(text)}}}),true);
+assert.equal(await maybeShowSupportInvitation(profile,{...options,env:{CLAUDECODE:'1'},usefulResult:true,stderr:{isTTY:true,write(text){writes.push(text)}}}),true);
 assert.equal(JSON.parse(writes[0]).schemaVersion,'hraness-support-discovery-v1');
+const unsure=[];
+assert.equal(await maybeShowSupportInvitation(profile,{...options,stateDirectory:${JSON.stringify(join(scratch, "quiet-preferences"))},usefulResult:true,stderr:{isTTY:false,write(text){unsure.push(text)}}}),false);
+assert.deepEqual(unsure,[]);
 `);
   run("node", [entry], scratch);
   const brokenPipe = join(scratch, "broken-pipe.mjs");

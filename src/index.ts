@@ -102,6 +102,106 @@ export function renderSupportOffer(offer: SupportOffer): string {
   ].join("\n") + "\n";
 }
 
+/**
+ * Human copy for the `support` command and the incidental invitation. The Rust
+ * crate reads the same strings from the generated `rust/src/contract-v1.json`.
+ * Placeholders: `{command}` (product argv prefix), `{product}`, `{date}`
+ * (UTC `YYYY-MM-DD`) and `{argument}`. Symbols follow the Hraness CLI style
+ * contract and fall back to `SUPPORT_ASCII_SYMBOLS` on plain terminals.
+ */
+export const SUPPORT_HUMAN_COPY = Object.freeze({
+  rule: "─".repeat(40),
+  optOut: "Hide these: {command} support dismiss · Ask again in 30 days: {command} support snooze",
+  optOutEnvironment: "Hide these: set HRANESS_SUPPORT=off",
+  help: [
+    "Usage: {command} support [command]",
+    "",
+    "See optional product updates and paid support for {product}.",
+    "",
+    "Commands",
+    "  (none)      Show the links for updates and support",
+    "  status      Show whether invitations are on",
+    "  dismiss     Stop showing invitations on this device",
+    "  snooze      Hide invitations for 30 days",
+    "  enable      Show invitations again",
+    "",
+    "Options",
+    "  --json      Print machine-readable output",
+    "  -h, --help  Show this help",
+  ].join("\n"),
+  dismissed: "✓ Support invitations are off on this device.",
+  snoozed: "✓ Support invitations are hidden for 30 days.",
+  enabled: "✓ Support invitations are on. You'll see at most one a week.",
+  statusOn: "● Support invitations are on. You'll see at most one a week.",
+  statusCooldown: "● Support invitations are on. The next one can appear after {date}.",
+  statusSnoozed: "○ Support invitations are hidden until {date}.",
+  statusOff: "○ Support invitations are off on this device.",
+  statusEnvironment: "○ Support invitations are turned off in this environment.",
+  hintEnable: "Turn them back on: {command} support enable",
+  hintDismiss: "Turn them off: {command} support dismiss",
+  busy: "✗ Another support command is running. Try again in a moment.",
+  unavailable: "✗ Couldn't read or save support preferences on this device.\n→ Try again, or set HRANESS_SUPPORT=off to hide invitations.",
+  unknown: "✗ Unknown support command \"{argument}\".\n→ {command} support --help",
+});
+
+/** ASCII replacements used when `TERM=dumb`, the locale is not UTF-8, or `HRANESS_ASCII=1`. */
+export const SUPPORT_ASCII_SYMBOLS: Readonly<Record<string, string>> = Object.freeze({
+  "✓": "OK", "✗": "FAIL", "→": "->", "●": "*", "○": "o", "─": "-", "·": "-",
+});
+
+/** A `Help & support` row for a desktop-foundation menu kit v2 snapshot. */
+export type SupportMenuItem = Readonly<{
+  kind: "action";
+  id: string;
+  label: "Help & support";
+  symbol: "action.support";
+  opens: "browser";
+  alternate?: Readonly<{ id: string; label: string; symbol?: "action.copy" }>;
+}>;
+
+export interface SupportMenuItemOptions {
+  /** Action ID the product maps to `supportMenuUrl()`. Default `support.open`. */
+  readonly id?: string;
+  /** Option-key alternate such as `{ id: "support.diagnostics", label: "Copy diagnostics", symbol: "action.copy" }`. */
+  readonly alternate?: Readonly<{ id: string; label: string; symbol?: "action.copy" }>;
+}
+
+const ACTION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+
+/**
+ * The standard `Help & support` menu row (menu kit v2). The row opens the
+ * browser; the product maps its action ID to `supportMenuUrl(profile)`.
+ * Alternates stay optional because Windows and Linux hide them.
+ */
+export function supportMenuItem(options: SupportMenuItemOptions = {}): SupportMenuItem {
+  const id = options.id ?? "support.open";
+  const alternate = options.alternate;
+  if (!ACTION_ID.test(id) || id.startsWith("foundation.")
+    || (alternate !== undefined && (!ACTION_ID.test(alternate.id) || alternate.id === id
+      || alternate.id.startsWith("foundation.") || !plainText(alternate.label, 48)
+      || (alternate.symbol !== undefined && alternate.symbol !== "action.copy")))) {
+    throw new TypeError("Invalid support menu item options.");
+  }
+  return Object.freeze({
+    kind: "action" as const,
+    id,
+    label: "Help & support" as const,
+    symbol: "action.support" as const,
+    opens: "browser" as const,
+    ...(alternate === undefined ? {} : {
+      alternate: Object.freeze({ id: alternate.id, label: alternate.label, ...(alternate.symbol === undefined ? {} : { symbol: alternate.symbol }) }),
+    }),
+  });
+}
+
+/** The page a desktop `Help & support` row opens: both updates and support choices. */
+export function supportMenuUrl(profile: SupportProfile): string {
+  const offer = createSupportOffer(profile, "desktop");
+  const url = new URL(offer.actions[0]!.url);
+  url.hash = "";
+  return url.href;
+}
+
 /** Portable, local guidance. Reading this contract neither claims nor presents an offer. */
 export function createSupportProtocol(profile: SupportProfile, options: SupportProtocolOptions) {
   const command = options.command;

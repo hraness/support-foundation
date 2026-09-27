@@ -240,3 +240,41 @@ fn product_help_lines_match_the_node_helpers() {
         "Optional support: xcb support - Turn off: HRANESS_SUPPORT=off"
     );
 }
+
+#[test]
+fn hraness_audience_ignores_case_and_surrounding_space() {
+    let shown = |env: &[(&str, &str)], terminal: bool| {
+        let directory = tempfile::tempdir().unwrap();
+        let mut options = options(&directory);
+        options.env = Some(
+            env.iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect(),
+        );
+        let buffer = Arc::new(Mutex::new(String::new()));
+        let written = Arc::clone(&buffer);
+        let output = Output::new(terminal, move |text| {
+            written.lock().unwrap().push_str(text);
+            Ok(())
+        });
+        let shown = maybe_show_with_output(&profile(), true, &options, &output);
+        let text = buffer.lock().unwrap().clone();
+        match (shown, text.starts_with('{')) {
+            (false, _) => "quiet",
+            (true, true) => "agent",
+            (true, false) => "human",
+        }
+    };
+    assert_eq!(shown(&[("HRANESS_AUDIENCE", "AGENT")], false), "agent");
+    assert_eq!(
+        shown(&[("HRANESS_AUDIENCE", " Off "), ("CLAUDECODE", "1")], true),
+        "quiet"
+    );
+    assert_eq!(
+        shown(
+            &[("HRANESS_AUDIENCE", "Human\n"), ("CLAUDECODE", "1")],
+            true
+        ),
+        "human"
+    );
+}

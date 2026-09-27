@@ -270,7 +270,7 @@ function explicitAudience(options) {
   if (options.audience !== undefined)
     return role(options.audience);
   const env = options.env ?? process.env;
-  const shared = env.HRANESS_AUDIENCE;
+  const shared = env.HRANESS_AUDIENCE?.trim().toLowerCase();
   if (shared === "human" || shared === "agent" || shared === "quiet" || shared === "off")
     return role(shared);
   const legacy = env.HRANESS_SUPPORT_AUDIENCE;

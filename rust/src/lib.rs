@@ -356,7 +356,10 @@ pub(crate) fn explicit_audience(options: &Options) -> Option<Audience> {
     if let Some(audience) = options.audience {
         return Some(audience);
     }
+    // Same normalization as desktop-foundation's detectAudience: case and
+    // surrounding space don't matter.
     if let Some(shared) = env_value(options, "HRANESS_AUDIENCE")
+        .map(|value| js_trim(&value).to_lowercase())
         .filter(|value| ["human", "agent", "quiet", "off"].contains(&value.as_str()))
     {
         return Some(role(&shared));

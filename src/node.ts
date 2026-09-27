@@ -150,7 +150,8 @@ function explicitAudience(options: SupportCommandOptions): Role | undefined {
   const role = (value: string): Role => value === "agent" || value === "human" ? value : "off";
   if (options.audience !== undefined) return role(options.audience);
   const env = options.env ?? process.env;
-  const shared = env.HRANESS_AUDIENCE;
+  // Same normalization as desktop-foundation's detectAudience: case and surrounding space don't matter.
+  const shared = env.HRANESS_AUDIENCE?.trim().toLowerCase();
   if (shared === "human" || shared === "agent" || shared === "quiet" || shared === "off") return role(shared);
   // Older hosts set the support-only variable; invalid values stay quiet.
   const legacy = env.HRANESS_SUPPORT_AUDIENCE;

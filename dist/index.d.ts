@@ -63,6 +63,10 @@ export declare const SUPPORT_HUMAN_COPY: Readonly<{
     busy: "✗ Another support command is running. Try again in a moment.";
     unavailable: "✗ Couldn't read or save support preferences on this device.\n→ Try again, or set HRANESS_SUPPORT=off to hide invitations.";
     unknown: "✗ Unknown support command \"{argument}\".\n→ {command} support --help";
+    /** The one support line a product's root `--help` may carry. */
+    helpLine: "Optional support: {command} support · Turn off: HRANESS_SUPPORT=off";
+    /** The agent-protocol verbs, for the product's `help advanced`, never root help. */
+    advancedHelp: string;
 }>;
 /** ASCII replacements used when `TERM=dumb`, the locale is not UTF-8, or `HRANESS_ASCII=1`. */
 export declare const SUPPORT_ASCII_SYMBOLS: Readonly<Record<string, string>>;

@@ -94,7 +94,16 @@ var SUPPORT_HUMAN_COPY = Object.freeze({
   unavailable: `✗ Couldn't read or save support preferences on this device.
 → Try again, or set HRANESS_SUPPORT=off to hide invitations.`,
   unknown: `✗ Unknown support command "{argument}".
-→ {command} support --help`
+→ {command} support --help`,
+  helpLine: "Optional support: {command} support · Turn off: HRANESS_SUPPORT=off",
+  advancedHelp: [
+    "Support for agents",
+    "  {command} support protocol --json   How an agent offers optional support",
+    "  {command} support offer --json      Reserve an invitation that is due",
+    "  {command} support shown <id>        Record that it was shown",
+    "  {command} support release <id>      Cancel one that wasn't shown"
+  ].join(`
+`)
 });
 var SUPPORT_ASCII_SYMBOLS = Object.freeze({
   "✓": "OK",
@@ -175,6 +184,29 @@ import { constants } from "node:fs";
 import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
+
+// node_modules/@hraness/desktop-foundation/dist/src/audience.js
+var AGENT_MARKERS = [
+  "AI_AGENT",
+  "CLAUDECODE",
+  "CODEX_SANDBOX",
+  "CODEX_SANDBOX_NETWORK_DISABLED",
+  "CURSOR_AGENT",
+  "GEMINI_CLI"
+];
+function detectAudience(input = {}) {
+  const env = input.env ?? process.env;
+  const override = env.HRANESS_AUDIENCE?.trim().toLowerCase();
+  if (override === "human" || override === "agent" || override === "quiet")
+    return override;
+  if (override === "off")
+    return "quiet";
+  if (AGENT_MARKERS.some((name) => (env[name] ?? "") !== ""))
+    return "agent";
+  return input.stderrIsTTY ?? process.stderr.isTTY === true ? "human" : "quiet";
+}
+
+// src/node.ts
 var WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 var SNOOZE_MS = 30 * 24 * 60 * 60 * 1000;
 var RESERVATION_MS = 10 * 60 * 1000;
@@ -233,7 +265,6 @@ function environmentSuppresses(options) {
     return value !== undefined && value !== "" && value !== "false" && value !== "0";
   });
 }
-var AGENT_MARKERS = ["AI_AGENT", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CURSOR_AGENT", "GEMINI_CLI"];
 function explicitAudience(options) {
   const role = (value) => value === "agent" || value === "human" ? value : "off";
   if (options.audience !== undefined)
@@ -249,10 +280,8 @@ function audience(options, stderr = options.stderr ?? process.stderr) {
   const explicit = explicitAudience(options);
   if (explicit !== undefined)
     return explicit;
-  const env = options.env ?? process.env;
-  if (AGENT_MARKERS.some((name) => (env[name] ?? "") !== ""))
-    return "agent";
-  return stderr.isTTY === true ? "human" : "off";
+  const detected = detectAudience({ env: options.env ?? process.env, stderrIsTTY: stderr.isTTY === true });
+  return detected === "quiet" ? "off" : detected;
 }
 function asciiOnly(env) {
   if (env.HRANESS_ASCII === "1" || env.TERM === "dumb")
@@ -271,6 +300,15 @@ function commandText(options) {
 }
 function fill(template, values) {
   return (values.command === "" ? template.replaceAll("{command} ", "") : template).replace(/\{(command|product|date|argument)\}/gu, (match, key) => values[key] ?? match);
+}
+function commandLine(template, options) {
+  return symbols(fill(template, { command: commandText(options) }), options);
+}
+function supportHelpLine(options = {}) {
+  return commandLine(SUPPORT_HUMAN_COPY.helpLine, options);
+}
+function supportAdvancedHelp(options = {}) {
+  return commandLine(SUPPORT_HUMAN_COPY.advancedHelp, options);
 }
 function isoDate(epochMs) {
   return new Date(epochMs).toISOString().slice(0, 10);
@@ -701,6 +739,8 @@ async function maybeShowSupportInvitation(profile, options) {
   }
 }
 export {
+  supportHelpLine,
+  supportAdvancedHelp,
   runSupportCommand,
   maybeShowSupportInvitation
 };

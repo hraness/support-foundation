@@ -1,6 +1,7 @@
 use hraness_support_foundation::{
     create_support_offer, create_support_protocol, maybe_show_with_output, run_support_command,
-    support_menu_item, support_menu_url, Audience, Options, Output, SupportProfile,
+    support_advanced_help, support_help_line, support_menu_item, support_menu_url, Audience,
+    Options, Output, SupportProfile,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -216,4 +217,26 @@ fn people_at_a_terminal_get_text_and_pipes_get_no_hint() {
     assert!(help
         .stdout
         .starts_with("Usage: fixture support [command]\n"));
+}
+
+#[test]
+fn product_help_lines_match_the_node_helpers() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut options = options(&directory);
+    options.command = vec!["/usr/local/bin/xcb".into()];
+    options.env = Some(BTreeMap::from([("LANG".into(), "en_US.UTF-8".into())]));
+    assert_eq!(
+        support_help_line(&options),
+        "Optional support: xcb support · Turn off: HRANESS_SUPPORT=off"
+    );
+    let advanced = support_advanced_help(&options);
+    assert!(advanced.starts_with("Support for agents\n  xcb support protocol --json "));
+    for verb in ["protocol", "offer", "shown", "release"] {
+        assert!(advanced.contains(&format!("xcb support {verb}")));
+    }
+    options.env = Some(BTreeMap::from([("TERM".into(), "dumb".into())]));
+    assert_eq!(
+        support_help_line(&options),
+        "Optional support: xcb support - Turn off: HRANESS_SUPPORT=off"
+    );
 }

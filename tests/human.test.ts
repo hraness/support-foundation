@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { supportMenuItem, supportMenuUrl } from "../src/index.js";
-import { runSupportCommand, type SupportCommandOptions } from "../src/node.js";
+import { runSupportCommand, supportAdvancedHelp, supportHelpLine, type SupportCommandOptions } from "../src/node.js";
 
 const profile = { id: "sponge", name: "Sponge", updates: true, valueProposition: "Support research tools." } as const;
 const NOW = Date.UTC(2026, 8, 26, 12);
@@ -157,5 +157,33 @@ describe("support menu row", () => {
   test("the row opens the product's support page with both choices", () => {
     expect(supportMenuUrl(profile)).toBe("https://account.hraness.com/support?product=sponge&source=desktop");
     expect(supportMenuUrl({ ...profile, updates: false })).toBe("https://account.hraness.com/support?product=sponge&source=desktop");
+  });
+});
+
+describe("product help lines", () => {
+  const utf8 = { LANG: "en_US.UTF-8" };
+
+  test("root help gets one support line with the product's command", () => {
+    expect(supportHelpLine({ command: ["/usr/local/bin/lifecharts"], env: utf8 }))
+      .toBe("Optional support: lifecharts support · Turn off: HRANESS_SUPPORT=off");
+    expect(supportHelpLine({ command: ["ghostget"], env: { LANG: "C" } }))
+      .toBe("Optional support: ghostget support - Turn off: HRANESS_SUPPORT=off");
+    expect(supportHelpLine({ env: utf8 })).toBe("Optional support: support · Turn off: HRANESS_SUPPORT=off");
+    expect(supportHelpLine({ command: ["lifecharts"], env: utf8 })).not.toContain("protocol");
+  });
+
+  test("the agent verbs go in help advanced, within 80 columns", () => {
+    const golden = [
+      "Support for agents",
+      "  lifecharts support protocol --json   How an agent offers optional support",
+      "  lifecharts support offer --json      Reserve an invitation that is due",
+      "  lifecharts support shown <id>        Record that it was shown",
+      "  lifecharts support release <id>      Cancel one that wasn't shown",
+    ].join("\n");
+    const advanced = supportAdvancedHelp({ command: ["lifecharts"], env: utf8 });
+    expect(advanced).toBe(golden);
+    expect(advanced.split("\n").every(line => line.length <= 80)).toBe(true);
+    // Every verb the protocol names for agents appears here and nowhere in `support --help`.
+    for (const verb of ["protocol", "offer", "shown", "release"]) expect(advanced).toContain(`support ${verb}`);
   });
 });

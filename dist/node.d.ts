@@ -35,6 +35,17 @@ export interface SupportInvitationOptions extends SupportCommandOptions {
     /** Set only for a completed, useful operation, never help, probes, or failures. */
     readonly usefulResult: boolean;
 }
+/**
+ * The single support line for a product's root `--help`:
+ * `Optional support: lifecharts support · Turn off: HRANESS_SUPPORT=off`.
+ * Pass the same `command` as `runSupportCommand`.
+ */
+export declare function supportHelpLine(options?: Pick<SupportCommandOptions, "command" | "env">): string;
+/**
+ * The agent-protocol verbs (`protocol`, `offer`, `shown`, `release`) as a
+ * block for the product's `help advanced`. Root help lists none of them.
+ */
+export declare function supportAdvancedHelp(options?: Pick<SupportCommandOptions, "command" | "env">): string;
 /** Explicit offers always work independently of local preferences; no action opens a browser or pays. */
 export declare function runSupportCommand(profile: SupportProfile, args?: readonly string[], options?: SupportCommandOptions): Promise<SupportCommandResult>;
 /**

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import ts from "typescript";
+import { AGENT_MARKERS } from "@hraness/desktop-foundation/audience";
 import { SUPPORT_ASCII_SYMBOLS, SUPPORT_HUMAN_COPY, createSupportOffer, createSupportProtocol, renderSupportOffer, supportMenuItem } from "../src/index.js";
 
 // JavaScript remains the authoritative published contract. Parse only the
@@ -19,19 +20,11 @@ function literal(node: ts.Expression): number | string {
 }
 const source = ts.createSourceFile("node.ts", await readFile(new URL("../src/node.ts", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
 const policy: Record<string, number | string> = {};
-let agentMarkers: string[] | undefined;
+// The shared audience rule's exact agent marker names come from desktop-foundation.
+const agentMarkers: string[] = [...AGENT_MARKERS];
 for (const statement of source.statements) {
   if (!ts.isVariableStatement(statement)) continue;
   for (const declaration of statement.declarationList.declarations) {
-    if (ts.isIdentifier(declaration.name) && declaration.name.text === "AGENT_MARKERS") {
-      // The shared audience rule's exact agent marker names, as one reviewed literal list.
-      const initializer = declaration.initializer;
-      assert.ok(initializer && ts.isAsExpression(initializer) && ts.isArrayLiteralExpression(initializer.expression));
-      agentMarkers = initializer.expression.elements.map(element => {
-        assert.ok(ts.isStringLiteral(element));
-        return element.text;
-      });
-    }
     if (ts.isIdentifier(declaration.name) && wanted.has(declaration.name.text)) {
       assert.ok(declaration.initializer);
       policy[declaration.name.text] = literal(declaration.initializer);
@@ -39,7 +32,7 @@ for (const statement of source.statements) {
   }
 }
 assert.deepEqual(Object.keys(policy).sort(), [...wanted].sort());
-assert.ok(agentMarkers !== undefined && agentMarkers.length > 0);
+assert.ok(agentMarkers.length > 0);
 const profile = { id: "contract-product", name: "PRODUCT_NAME", updates: true, valueProposition: "VALUE_PROPOSITION" };
 const offer = createSupportOffer(profile, "cli");
 const rendered = renderSupportOffer({ ...offer, emailSuggestion: { email: "EMAIL_ADDRESS", source: "git-config", verified: false } }).trimEnd().split("\n");

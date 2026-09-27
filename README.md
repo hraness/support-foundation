@@ -16,7 +16,7 @@ recurring terms, and checkout.
 Pin a release tag in the product that owns the integration:
 
 ```json
-{ "dependencies": { "@hraness/support-foundation": "github:hraness/support-foundation#v0.5.0" } }
+{ "dependencies": { "@hraness/support-foundation": "github:hraness/support-foundation#v0.6.0" } }
 ```
 
 The root entry has no runtime dependencies or filesystem access.
@@ -83,7 +83,9 @@ adapter follows the shared Hraness audience rule:
 
 1. An explicit host `audience` option, then `HRANESS_AUDIENCE`
    (`human`, `agent`, `quiet` or `off`), then the older
-   `HRANESS_SUPPORT_AUDIENCE`.
+   `HRANESS_SUPPORT_AUDIENCE`. Steps 2 to 4 are `detectAudience` from
+   desktop-foundation 0.8, bundled into `dist` so installs need no extra
+   package.
 2. Any of the exact agent markers `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`,
    `CODEX_SANDBOX_NETWORK_DISABLED`, `CURSOR_AGENT` or `GEMINI_CLI` set to a
    nonempty value selects the agent.
@@ -95,9 +97,30 @@ A person sees the invitation below a rule line, followed by how to hide it:
 snooze`. A detected agent receives a compact versioned discovery notice on
 stderr instead. Stdout stays unchanged. A notice contains the protocol command,
 does not discover email or reserve an invitation, and never consumes the weekly
-presentation window. Its shared attempt throttle is ten minutes. Root help and
-public agent documentation should also expose the protocol command so
-discovery works without an installed product skill.
+presentation window. Its shared attempt throttle is ten minutes. Public agent
+documentation should also expose the protocol command so discovery works
+without an installed product skill.
+
+### Product help
+
+Root `--help` carries one support line and nothing about the agent protocol.
+The protocol verbs (`protocol`, `offer`, `shown`, `release`) belong under the
+product's `help advanced`, and they keep working from any caller:
+
+```ts
+import { supportAdvancedHelp, supportHelpLine } from "@hraness/support-foundation/node";
+
+supportHelpLine({ command: ["ghostget"] });
+// Optional support: ghostget support · Turn off: HRANESS_SUPPORT=off
+supportAdvancedHelp({ command: ["ghostget"] });
+// Support for agents
+//   ghostget support protocol --json   How an agent offers optional support
+//   …
+```
+
+Rust products use `support_help_line(&options)` and
+`support_advanced_help(&options)` with the same `Options`. Both apply the
+ASCII fallbacks. Keep support lines out of the bare-invocation start screen.
 
 `off`, `quiet` and unknown role values suppress incidental output and skill
 offer claims. Products that set `HRANESS_SUPPORT_AUDIENCE=off` for their own

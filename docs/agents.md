@@ -1,7 +1,8 @@
 # Integrate an agent lifecycle
 
 An installed skill is optional. Publish `<product> support protocol --json` in
-root help and public agent documentation. It returns local, portable versioned
+public agent documentation and in the product's `help advanced`
+(`supportAdvancedHelp()`); root help carries only `supportHelpLine()`. It returns local, portable versioned
 data without reading Git, reserving an invitation, writing preferences, or
 making a network request. Product adapters provide the explicit executable
 prefix, so the protocol never guesses it from the Accounts product ID. Consume

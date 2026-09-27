@@ -296,6 +296,30 @@ pub(crate) fn iso_date(epoch_ms: u64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
+fn command_line(key: &str, options: &Options) -> String {
+    let command = command_text(options);
+    let template = human_copy(key);
+    let text = if command.is_empty() {
+        template.replace("{command} ", "")
+    } else {
+        template.to_owned()
+    };
+    symbols(&fill(&text, &[("command", command.as_str())]), options)
+}
+
+/// The single support line for a product's root `--help`, such as
+/// `Optional support: xcb support · Turn off: HRANESS_SUPPORT=off`.
+/// Uses `options.command` and `options.env` like [`run_support_command`].
+pub fn support_help_line(options: &Options) -> String {
+    command_line("helpLine", options)
+}
+
+/// The agent-protocol verbs (`protocol`, `offer`, `shown`, `release`) as a
+/// block for the product's `help advanced`. Root help lists none of them.
+pub fn support_advanced_help(options: &Options) -> String {
+    command_line("advancedHelp", options)
+}
+
 /// The standard `Help & support` row for a desktop-foundation menu kit v2
 /// snapshot. The product maps its action ID to [`support_menu_url`].
 pub fn support_menu_item() -> Value {
@@ -324,14 +348,18 @@ fn role(value: &str) -> Audience {
     }
 }
 
-// TODO(df-0.8): use hraness-cli-kit `audience::detect`. This copy follows the
-// shared Hraness CLI contract; the marker names come from the generated contract.
+// TODO(df-0.8.1): use hraness-cli-kit `audience::detect` once it is tagged. This
+// copy follows the shared Hraness CLI contract; the marker names come from the
+// generated contract, which reads them from desktop-foundation's `AGENT_MARKERS`.
 /// A role the host or environment chose on purpose, or `None` to infer one.
 pub(crate) fn explicit_audience(options: &Options) -> Option<Audience> {
     if let Some(audience) = options.audience {
         return Some(audience);
     }
+    // Same normalization as desktop-foundation's detectAudience: case and
+    // surrounding space don't matter.
     if let Some(shared) = env_value(options, "HRANESS_AUDIENCE")
+        .map(|value| js_trim(&value).to_lowercase())
         .filter(|value| ["human", "agent", "quiet", "off"].contains(&value.as_str()))
     {
         return Some(role(&shared));

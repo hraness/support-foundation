@@ -140,6 +140,10 @@ describe("portable lifecycle discovery", () => {
       [{ HRANESS_AUDIENCE: "robot", AI_AGENT: "x" }, true, "agent"],
       [{ HRANESS_SUPPORT_AUDIENCE: "agent" }, true, "agent"],
       [{ HRANESS_AUDIENCE: "human", HRANESS_SUPPORT_AUDIENCE: "agent" }, true, "human"],
+      // Case and surrounding space don't matter, as in desktop-foundation's detectAudience.
+      [{ HRANESS_AUDIENCE: "AGENT" }, false, "agent"],
+      [{ HRANESS_AUDIENCE: " Off ", CLAUDECODE: "1" }, true, "quiet"],
+      [{ HRANESS_AUDIENCE: "Human\n", CLAUDECODE: "1" }, true, "human"],
     ];
     for (const [env, isTTY, expected] of cases) {
       const stateDirectory = join(directory, `aud-${Math.random()}`);

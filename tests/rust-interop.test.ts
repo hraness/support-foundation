@@ -136,7 +136,8 @@ describe("Rust and JavaScript published contract interoperability", () => {
         expect(rustHook).toEqual({ shown, output });
       }
     }
-    for (const env of [{ LANG: "C.UTF-8" }, { HRANESS_ASCII: "1", LANG: "C.UTF-8" }, { CLAUDECODE: "1" }, { HRANESS_AUDIENCE: "agent" }]) {
+    for (const env of [{ LANG: "C.UTF-8" }, { HRANESS_ASCII: "1", LANG: "C.UTF-8" }, { CLAUDECODE: "1" }, { HRANESS_AUDIENCE: "agent" },
+      { HRANESS_AUDIENCE: "AGENT" }, { HRANESS_AUDIENCE: " Off ", CLAUDECODE: "1" }, { HRANESS_AUDIENCE: "Human ", CLAUDECODE: "1" }]) {
       for (const stderrTty of [false, true]) {
         for (const command of [prefix, []]) {
           const path = await directory();

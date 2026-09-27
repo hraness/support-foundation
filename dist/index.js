@@ -94,7 +94,16 @@ var SUPPORT_HUMAN_COPY = Object.freeze({
   unavailable: `✗ Couldn't read or save support preferences on this device.
 → Try again, or set HRANESS_SUPPORT=off to hide invitations.`,
   unknown: `✗ Unknown support command "{argument}".
-→ {command} support --help`
+→ {command} support --help`,
+  helpLine: "Optional support: {command} support · Turn off: HRANESS_SUPPORT=off",
+  advancedHelp: [
+    "Support for agents",
+    "  {command} support protocol --json   How an agent offers optional support",
+    "  {command} support offer --json      Reserve an invitation that is due",
+    "  {command} support shown <id>        Record that it was shown",
+    "  {command} support release <id>      Cancel one that wasn't shown"
+  ].join(`
+`)
 });
 var SUPPORT_ASCII_SYMBOLS = Object.freeze({
   "✓": "OK",

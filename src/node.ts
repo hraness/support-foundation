@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { detectAudience } from "@hraness/desktop-foundation/audience";
 import {
   SUPPORT_ASCII_SYMBOLS, SUPPORT_HUMAN_COPY, createSupportOffer, createSupportProtocol, renderSupportOffer,
   type SupportOffer, type SupportProfile,
@@ -144,30 +145,30 @@ function environmentSuppresses(options: SupportCommandOptions): boolean {
 
 type Role = "agent" | "human" | "off";
 
-// TODO(df-0.8): use detectAudience from @hraness/desktop-foundation. This copy
-// follows the shared Hraness CLI contract verbatim, because this package must
-// not depend on desktop-foundation. Only exact names count as agent markers.
-const AGENT_MARKERS = ["AI_AGENT", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CURSOR_AGENT", "GEMINI_CLI"] as const;
-
 /** A role the host or environment chose on purpose, or undefined to infer one. */
 function explicitAudience(options: SupportCommandOptions): Role | undefined {
   const role = (value: string): Role => value === "agent" || value === "human" ? value : "off";
   if (options.audience !== undefined) return role(options.audience);
   const env = options.env ?? process.env;
-  const shared = env.HRANESS_AUDIENCE;
+  // Same normalization as desktop-foundation's detectAudience: case and surrounding space don't matter.
+  const shared = env.HRANESS_AUDIENCE?.trim().toLowerCase();
   if (shared === "human" || shared === "agent" || shared === "quiet" || shared === "off") return role(shared);
   // Older hosts set the support-only variable; invalid values stay quiet.
   const legacy = env.HRANESS_SUPPORT_AUDIENCE;
   return legacy === undefined ? undefined : role(legacy);
 }
 
-/** Explicit role, then agent markers, then human at an interactive stderr, else quiet (off). */
+/**
+ * Explicit role, then the shared Hraness rule (`detectAudience` from
+ * desktop-foundation: agent markers, then human at an interactive stderr, else
+ * quiet, which is off here). The build bundles that module, so installs carry
+ * no runtime dependency.
+ */
 function audience(options: SupportCommandOptions, stderr: SupportOutput = options.stderr ?? process.stderr): Role {
   const explicit = explicitAudience(options);
   if (explicit !== undefined) return explicit;
-  const env = options.env ?? process.env;
-  if (AGENT_MARKERS.some(name => (env[name] ?? "") !== "")) return "agent";
-  return stderr.isTTY === true ? "human" : "off";
+  const detected = detectAudience({ env: options.env ?? process.env, stderrIsTTY: stderr.isTTY === true });
+  return detected === "quiet" ? "off" : detected;
 }
 
 function asciiOnly(env: Readonly<Record<string, string | undefined>>): boolean {
@@ -190,6 +191,28 @@ function commandText(options: SupportCommandOptions): string {
 function fill(template: string, values: Readonly<Record<string, string>>): string {
   // Without a product prefix the command is plain `support …`.
   return (values.command === "" ? template.replaceAll("{command} ", "") : template).replace(/\{(command|product|date|argument)\}/gu, (match, key: string) => values[key] ?? match);
+}
+
+/** `{command}` filled like every other support line; ASCII fallbacks apply. */
+function commandLine(template: string, options: SupportCommandOptions): string {
+  return symbols(fill(template, { command: commandText(options) }), options);
+}
+
+/**
+ * The single support line for a product's root `--help`:
+ * `Optional support: lifecharts support · Turn off: HRANESS_SUPPORT=off`.
+ * Pass the same `command` as `runSupportCommand`.
+ */
+export function supportHelpLine(options: Pick<SupportCommandOptions, "command" | "env"> = {}): string {
+  return commandLine(SUPPORT_HUMAN_COPY.helpLine, options);
+}
+
+/**
+ * The agent-protocol verbs (`protocol`, `offer`, `shown`, `release`) as a
+ * block for the product's `help advanced`. Root help lists none of them.
+ */
+export function supportAdvancedHelp(options: Pick<SupportCommandOptions, "command" | "env"> = {}): string {
+  return commandLine(SUPPORT_HUMAN_COPY.advancedHelp, options);
 }
 
 function isoDate(epochMs: number): string {

@@ -1,6 +1,6 @@
 {
   "name": "@hraness/support-foundation",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Offer free product updates and optional paid support from a CLI, with a shared weekly cooldown and opt-out.",
   "license": "MIT",
   "type": "module",
@@ -23,6 +23,7 @@
     "check": "bun run typecheck && bun run check:rust-contract && bun run check:rust && bun run test && bun run build && bun run test:package"
   },
   "devDependencies": {
+    "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
     "@types/bun": "1.3.14",
     "@types/node": "24.10.1",
     "typescript": "6.0.3"

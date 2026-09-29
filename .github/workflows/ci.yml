@@ -41,10 +41,11 @@ jobs:
       - run: bun run check
         if: runner.os == 'Linux'
       # Linux runs the full gate. macOS only reruns what depends on the host:
-      # the Rust/JS interop binary, FIFO state and Git email discovery.
+      # the Rust/JS interop binary, Rust and JS FIFO/mode state, and Git email
+      # discovery.
       - name: Rust and cross-runtime interoperability on macOS
         if: runner.os == 'macOS'
-        run: cargo build --locked --example interop && bun test tests/rust-interop.test.ts tests/node.test.ts tests/git-email.test.ts
+        run: cargo build --locked --example interop && cargo test --locked --test contract state_symlinks_fifo_and_private_modes_fail_closed && bun test tests/rust-interop.test.ts tests/node.test.ts tests/git-email.test.ts
       - name: Rust and cross-runtime interoperability on Windows
         if: runner.os == 'Windows'
         run: bun run typecheck && bun run check:rust-contract && bun run check:rust && bun test tests/rust-interop.test.ts

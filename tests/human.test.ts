@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { supportMenuItem, supportMenuUrl } from "../src/index.js";
+import * as root from "../src/index.js";
+import { supportPageUrl } from "../src/index.js";
 import { runSupportCommand, supportAdvancedHelp, supportHelpLine, type SupportCommandOptions } from "../src/node.js";
 
 const profile = { id: "sponge", name: "Sponge", updates: true, valueProposition: "Support research tools." } as const;
@@ -132,31 +133,15 @@ describe("support command for people", () => {
   });
 });
 
-describe("support menu row", () => {
-  test("is a menu kit v2 action that opens the browser", () => {
-    expect(supportMenuItem()).toEqual({ kind: "action", id: "support.open", label: "Help & support", symbol: "action.support", opens: "browser" });
-    expect(supportMenuItem({ id: "help", alternate: { id: "help.copy", label: "Copy diagnostics", symbol: "action.copy" } })).toEqual({
-      kind: "action", id: "help", label: "Help & support", symbol: "action.support", opens: "browser",
-      alternate: { id: "help.copy", label: "Copy diagnostics", symbol: "action.copy" },
-    });
-    expect(Object.isFrozen(supportMenuItem())).toBe(true);
+describe("support page for terminal views", () => {
+  test("opens the product's support page with both choices, from the CLI", () => {
+    expect(supportPageUrl(profile)).toBe("https://account.hraness.com/support?product=sponge&source=cli");
+    expect(supportPageUrl({ ...profile, updates: false })).toBe("https://account.hraness.com/support?product=sponge&source=cli");
+    expect(() => supportPageUrl({ ...profile, id: "Bad ID" })).toThrow(TypeError);
   });
 
-  test("rejects reserved, duplicate or malformed IDs", () => {
-    for (const options of [
-      { id: "foundation.login" }, { id: "" }, { id: "has space" },
-      { alternate: { id: "support.open", label: "Copy" } },
-      { alternate: { id: "foundation.x", label: "Copy" } },
-      { alternate: { id: "ok", label: "" } },
-      { alternate: { id: "ok", label: "Copy", symbol: "action.open" as never } },
-    ]) {
-      expect(() => supportMenuItem(options)).toThrow(TypeError);
-    }
-  });
-
-  test("the row opens the product's support page with both choices", () => {
-    expect(supportMenuUrl(profile)).toBe("https://account.hraness.com/support?product=sponge&source=desktop");
-    expect(supportMenuUrl({ ...profile, updates: false })).toBe("https://account.hraness.com/support?product=sponge&source=desktop");
+  test("exports no menu bar or companion helpers", () => {
+    expect(Object.keys(root).filter(name => /menu|companion|tray/iu.test(name))).toEqual([]);
   });
 });
 

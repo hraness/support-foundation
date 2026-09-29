@@ -1,7 +1,7 @@
 use hraness_support_foundation::{
     create_support_offer, create_support_protocol, maybe_show_with_output, run_support_command,
-    support_advanced_help, support_help_line, support_menu_item, support_menu_url, Audience,
-    Options, Output, SupportProfile,
+    support_advanced_help, support_help_line, support_page_url, Audience, Options, Output,
+    SupportProfile,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -184,15 +184,12 @@ fn state_symlinks_fifo_and_private_modes_fail_closed() {
 }
 
 #[test]
-fn support_menu_row_matches_the_node_helper() {
+fn support_page_matches_the_node_helper() {
     assert_eq!(
-        support_menu_item(),
-        json!({"kind":"action","id":"support.open","label":"Help & support","symbol":"action.support","opens":"browser"})
+        support_page_url(&profile()).unwrap(),
+        "https://account.hraness.com/support?product=fixture&source=cli"
     );
-    assert_eq!(
-        support_menu_url(&profile()).unwrap(),
-        "https://account.hraness.com/support?product=fixture&source=desktop"
-    );
+    assert!(!include_str!("../src/contract-v1.json").contains("menuItem"));
 }
 
 #[test]

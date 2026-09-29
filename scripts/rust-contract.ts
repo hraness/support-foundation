@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import ts from "typescript";
 import { AGENT_MARKERS } from "@hraness/desktop-foundation/audience";
-import { SUPPORT_ASCII_SYMBOLS, SUPPORT_HUMAN_COPY, createSupportOffer, createSupportProtocol, renderSupportOffer, supportMenuItem } from "../src/index.js";
+import { SUPPORT_ASCII_SYMBOLS, SUPPORT_HUMAN_COPY, createSupportOffer, createSupportProtocol, renderSupportOffer } from "../src/index.js";
 
 // JavaScript remains the authoritative published contract. Parse only the
 // declared literal/arithmetic constants; a changed expression fails this gate
@@ -49,7 +49,6 @@ const contract = JSON.stringify({
   human: SUPPORT_HUMAN_COPY,
   asciiSymbols: SUPPORT_ASCII_SYMBOLS,
   agentMarkers,
-  menuItem: supportMenuItem(),
 }, null, 2) + "\n";
 const output = new URL("../rust/src/contract-v1.json", import.meta.url);
 if (process.argv.includes("--check")) assert.equal(await readFile(output, "utf8"), contract, "Rust contract drifted from the published JavaScript protocol/policy");

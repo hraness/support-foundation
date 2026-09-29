@@ -135,12 +135,5 @@
     "CODEX_SANDBOX_NETWORK_DISABLED",
     "CURSOR_AGENT",
     "GEMINI_CLI"
-  ],
-  "menuItem": {
-    "kind": "action",
-    "id": "support.open",
-    "label": "Help & support",
-    "symbol": "action.support",
-    "opens": "browser"
-  }
+  ]
 }

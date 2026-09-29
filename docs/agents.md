@@ -15,7 +15,8 @@ JSON output) receive a bounded stderr discovery notice. This notice only points
 to the protocol. It has a shared ten-minute attempt throttle and is separate
 from invitations, Git-email discovery, and the weekly presentation cadence.
 The product keeps ordinary stdout and exit codes unchanged and excludes quiet,
-help, probes, failures, nested calls, SDK/embedded and unattended execution.
+help, probes (`status`, `tui`, `doctor`, `commands --json`, `control status`),
+failures, nested calls, SDK/embedded and unattended execution.
 
 The audience follows the shared Hraness rule: an explicit host `audience`
 option, then `HRANESS_AUDIENCE=human|agent|quiet|off`, then the older

@@ -142,7 +142,11 @@ export const SUPPORT_HUMAN_COPY = Object.freeze({
   busy: "✗ Another support command is running. Try again in a moment.",
   unavailable: "✗ Couldn't read or save support preferences on this device.\n→ Try again, or set HRANESS_SUPPORT=off to hide invitations.",
   unknown: "✗ Unknown support command \"{argument}\".\n→ {command} support --help",
-  /** The one support line a product's root `--help` may carry. */
+  /**
+   * The one support line a product's root `--help` may carry. A `tui` view
+   * may show it as its footer. Keep it out of `status --json`, `tui --json`
+   * and `doctor --json`.
+   */
   helpLine: "Optional support: {command} support · Turn off: HRANESS_SUPPORT=off",
   /** The agent-protocol verbs, for the product's `help advanced`, never root help. */
   advancedHelp: [
@@ -159,54 +163,14 @@ export const SUPPORT_ASCII_SYMBOLS: Readonly<Record<string, string>> = Object.fr
   "✓": "OK", "✗": "FAIL", "→": "->", "●": "*", "○": "o", "─": "-", "·": "-",
 });
 
-/** A `Help & support` row for a desktop-foundation menu kit v2 snapshot. */
-export type SupportMenuItem = Readonly<{
-  kind: "action";
-  id: string;
-  label: "Help & support";
-  symbol: "action.support";
-  opens: "browser";
-  alternate?: Readonly<{ id: string; label: string; symbol?: "action.copy" }>;
-}>;
-
-export interface SupportMenuItemOptions {
-  /** Action ID the product maps to `supportMenuUrl()`. Default `support.open`. */
-  readonly id?: string;
-  /** Option-key alternate such as `{ id: "support.diagnostics", label: "Copy diagnostics", symbol: "action.copy" }`. */
-  readonly alternate?: Readonly<{ id: string; label: string; symbol?: "action.copy" }>;
-}
-
-const ACTION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
-
 /**
- * The standard `Help & support` menu row (menu kit v2). The row opens the
- * browser; the product maps its action ID to `supportMenuUrl(profile)`.
- * Alternates stay optional because Windows and Linux hide them.
+ * The Accounts support page for a product, with both the updates and the
+ * paid-support choices, for a person at a terminal: print it from the
+ * product's `support` command or show it in its `tui` view. The package never
+ * opens a browser.
  */
-export function supportMenuItem(options: SupportMenuItemOptions = {}): SupportMenuItem {
-  const id = options.id ?? "support.open";
-  const alternate = options.alternate;
-  if (!ACTION_ID.test(id) || id.startsWith("foundation.")
-    || (alternate !== undefined && (!ACTION_ID.test(alternate.id) || alternate.id === id
-      || alternate.id.startsWith("foundation.") || !plainText(alternate.label, 48)
-      || (alternate.symbol !== undefined && alternate.symbol !== "action.copy")))) {
-    throw new TypeError("Invalid support menu item options.");
-  }
-  return Object.freeze({
-    kind: "action" as const,
-    id,
-    label: "Help & support" as const,
-    symbol: "action.support" as const,
-    opens: "browser" as const,
-    ...(alternate === undefined ? {} : {
-      alternate: Object.freeze({ id: alternate.id, label: alternate.label, ...(alternate.symbol === undefined ? {} : { symbol: alternate.symbol }) }),
-    }),
-  });
-}
-
-/** The page a desktop `Help & support` row opens: both updates and support choices. */
-export function supportMenuUrl(profile: SupportProfile): string {
-  const offer = createSupportOffer(profile, "desktop");
+export function supportPageUrl(profile: SupportProfile): string {
+  const offer = createSupportOffer(profile, "cli");
   const url = new URL(offer.actions[0]!.url);
   url.hash = "";
   return url.href;

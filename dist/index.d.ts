@@ -63,44 +63,24 @@ export declare const SUPPORT_HUMAN_COPY: Readonly<{
     busy: "✗ Another support command is running. Try again in a moment.";
     unavailable: "✗ Couldn't read or save support preferences on this device.\n→ Try again, or set HRANESS_SUPPORT=off to hide invitations.";
     unknown: "✗ Unknown support command \"{argument}\".\n→ {command} support --help";
-    /** The one support line a product's root `--help` may carry. */
+    /**
+     * The one support line a product's root `--help` may carry. A `tui` view
+     * may show it as its footer. Keep it out of `status --json`, `tui --json`
+     * and `doctor --json`.
+     */
     helpLine: "Optional support: {command} support · Turn off: HRANESS_SUPPORT=off";
     /** The agent-protocol verbs, for the product's `help advanced`, never root help. */
     advancedHelp: string;
 }>;
 /** ASCII replacements used when `TERM=dumb`, the locale is not UTF-8, or `HRANESS_ASCII=1`. */
 export declare const SUPPORT_ASCII_SYMBOLS: Readonly<Record<string, string>>;
-/** A `Help & support` row for a desktop-foundation menu kit v2 snapshot. */
-export type SupportMenuItem = Readonly<{
-    kind: "action";
-    id: string;
-    label: "Help & support";
-    symbol: "action.support";
-    opens: "browser";
-    alternate?: Readonly<{
-        id: string;
-        label: string;
-        symbol?: "action.copy";
-    }>;
-}>;
-export interface SupportMenuItemOptions {
-    /** Action ID the product maps to `supportMenuUrl()`. Default `support.open`. */
-    readonly id?: string;
-    /** Option-key alternate such as `{ id: "support.diagnostics", label: "Copy diagnostics", symbol: "action.copy" }`. */
-    readonly alternate?: Readonly<{
-        id: string;
-        label: string;
-        symbol?: "action.copy";
-    }>;
-}
 /**
- * The standard `Help & support` menu row (menu kit v2). The row opens the
- * browser; the product maps its action ID to `supportMenuUrl(profile)`.
- * Alternates stay optional because Windows and Linux hide them.
+ * The Accounts support page for a product, with both the updates and the
+ * paid-support choices, for a person at a terminal: print it from the
+ * product's `support` command or show it in its `tui` view. The package never
+ * opens a browser.
  */
-export declare function supportMenuItem(options?: SupportMenuItemOptions): SupportMenuItem;
-/** The page a desktop `Help & support` row opens: both updates and support choices. */
-export declare function supportMenuUrl(profile: SupportProfile): string;
+export declare function supportPageUrl(profile: SupportProfile): string;
 /** Portable, local guidance. Reading this contract neither claims nor presents an offer. */
 export declare function createSupportProtocol(profile: SupportProfile, options: SupportProtocolOptions): Readonly<{
     schemaVersion: "hraness-support-protocol-v1";

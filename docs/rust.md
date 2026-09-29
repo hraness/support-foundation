@@ -29,8 +29,9 @@ After a classified useful successful CLI operation, call
 `maybe_show_support_invitation(&profile, true, &options)`. Skip help, version,
 probes, quiet modes, embedded execution and unattended work. This hook writes
 only stderr and returns a best-effort output result. Do not propagate it as the
-product's exit status. The audience follows the same rule as the Node adapter:
-explicit option or environment, then agent markers, then human at an
+product's exit status. The control verbs `status`, `tui`, `doctor`,
+`commands --json` and `control status` are probes. The audience follows the
+same rule as the Node adapter: explicit option or environment, then agent markers, then human at an
 interactive stderr, else quiet. `Options::stderr_is_terminal` overrides the
 terminal check for explicit commands. Explicit human mode additionally requires
 interactive stderr. The same environment controls,

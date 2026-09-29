@@ -320,15 +320,12 @@ pub fn support_advanced_help(options: &Options) -> String {
     command_line("advancedHelp", options)
 }
 
-/// The standard `Help & support` row for a desktop-foundation menu kit v2
-/// snapshot. The product maps its action ID to [`support_menu_url`].
-pub fn support_menu_item() -> Value {
-    contract()["menuItem"].clone()
-}
-
-/// The page a desktop `Help & support` row opens: both updates and support choices.
-pub fn support_menu_url(profile: &SupportProfile) -> Result<String, SupportError> {
-    let offer = create_support_offer(profile, "desktop")?;
+/// The Accounts support page for a product, with both the updates and the
+/// paid-support choices, for a person at a terminal: print it from the
+/// product's `support` command or show it in its `tui` view. The crate never
+/// opens a browser.
+pub fn support_page_url(profile: &SupportProfile) -> Result<String, SupportError> {
+    let offer = create_support_offer(profile, "cli")?;
     let url = offer["actions"][0]["url"].as_str().expect("validated URL");
     Ok(url.split('#').next().unwrap_or(url).to_owned())
 }

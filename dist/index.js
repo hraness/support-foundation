@@ -114,26 +114,8 @@ var SUPPORT_ASCII_SYMBOLS = Object.freeze({
   "─": "-",
   "·": "-"
 });
-var ACTION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
-function supportMenuItem(options = {}) {
-  const id = options.id ?? "support.open";
-  const alternate = options.alternate;
-  if (!ACTION_ID.test(id) || id.startsWith("foundation.") || alternate !== undefined && (!ACTION_ID.test(alternate.id) || alternate.id === id || alternate.id.startsWith("foundation.") || !plainText(alternate.label, 48) || alternate.symbol !== undefined && alternate.symbol !== "action.copy")) {
-    throw new TypeError("Invalid support menu item options.");
-  }
-  return Object.freeze({
-    kind: "action",
-    id,
-    label: "Help & support",
-    symbol: "action.support",
-    opens: "browser",
-    ...alternate === undefined ? {} : {
-      alternate: Object.freeze({ id: alternate.id, label: alternate.label, ...alternate.symbol === undefined ? {} : { symbol: alternate.symbol } })
-    }
-  });
-}
-function supportMenuUrl(profile) {
-  const offer = createSupportOffer(profile, "desktop");
+function supportPageUrl(profile) {
+  const offer = createSupportOffer(profile, "cli");
   const url = new URL(offer.actions[0].url);
   url.hash = "";
   return url.href;
@@ -177,8 +159,7 @@ function createSupportProtocol(profile, options) {
   });
 }
 export {
-  supportMenuUrl,
-  supportMenuItem,
+  supportPageUrl,
   renderSupportOffer,
   parseSupportProfile,
   createSupportProtocol,

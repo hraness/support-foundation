@@ -5,7 +5,7 @@
     "": {
       "name": "@hraness/support-foundation",
       "devDependencies": {
-        "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
+        "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v1.0.0/hraness-desktop-foundation-1.0.0.tgz",
         "@types/bun": "1.3.14",
         "@types/node": "24.10.1",
         "typescript": "6.0.3",
@@ -13,7 +13,7 @@
     },
   },
   "packages": {
-    "@hraness/desktop-foundation": ["@hraness/desktop-foundation@https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz", { "bin": { "companion": "./dist/src/cli.js" } }, "sha512-VvuyeA+KwOj+SR7Opeivhy5p2uNHlGBhEBV8860105kAPOauUuttcSUSTV93dqkNQYBBUwhVZx9CchRj/dmhHw=="],
+    "@hraness/desktop-foundation": ["@hraness/desktop-foundation@https://github.com/hraness/desktop-foundation/releases/download/v1.0.0/hraness-desktop-foundation-1.0.0.tgz", {}, "sha512-SFluJb720KGsO2ewKSQ72hkWUu9voQXyOUQLCEHOsKKAMMeJMmEBLMP5hydbTBEu3IDB8zEkw6O10Mu/nzOakg=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

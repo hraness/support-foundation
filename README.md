@@ -16,7 +16,7 @@ recurring terms, and checkout.
 Pin a release tag in the product that owns the integration:
 
 ```json
-{ "dependencies": { "@hraness/support-foundation": "github:hraness/support-foundation#v0.6.0" } }
+{ "dependencies": { "@hraness/support-foundation": "github:hraness/support-foundation#v0.8.0" } }
 ```
 
 The root entry has no runtime dependencies or filesystem access.
@@ -84,7 +84,7 @@ adapter follows the shared Hraness audience rule:
 1. An explicit host `audience` option, then `HRANESS_AUDIENCE`
    (`human`, `agent`, `quiet` or `off`), then the older
    `HRANESS_SUPPORT_AUDIENCE`. Steps 2 to 4 are `detectAudience` from
-   desktop-foundation 0.8, bundled into `dist` so installs need no extra
+   desktop-foundation 1.0, bundled into `dist` so installs need no extra
    package.
 2. Any of the exact agent markers `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`,
    `CODEX_SANDBOX_NETWORK_DISABLED`, `CURSOR_AGENT` or `GEMINI_CLI` set to a
@@ -128,7 +128,10 @@ child processes keep those children quiet; only an explicit host option
 overrides that. CI and `HRANESS_SUPPORT=off` always suppress incidental work.
 Explicit support and protocol requests remain available.
 The integrating product must exclude help, version, errors, probes, quiet
-modes, embedded/SDK execution, nested tool calls, and unattended tasks.
+modes, embedded/SDK execution, nested tool calls, and unattended tasks. The
+shared control verbs are probes: `<product> status`, `<product> tui`,
+`<product> doctor`, `<product> commands --json` and `<product> control status`
+never show an invitation, and their JSON never carries support text.
 
 Ordinary commands make no support network requests. State failures suppress
 incidental invitations without changing the command result. Explicit support
@@ -227,15 +230,15 @@ invitation appears exactly once.
 
 ## Other media
 
-Use the same root offer for a website footer or a desktop menu action. The
-product owns its presentation and browser-opening action. For a
-desktop-foundation menu (menu kit v2), `supportMenuItem()` returns the standard
-`Help & support` row (`symbol: "action.support"`, `opens: "browser"`, optional
-Option-key alternate such as Copy diagnostics), and `supportMenuUrl(profile)`
-returns the page that row opens. The Rust crate exports `support_menu_item()`
-and `support_menu_url(&profile)`. Keep web links
-visible without automatic modals; use stable desktop menu items. Newsletter
-signup and payment remain independent choices. Applications distributed
+Use the same root offer for a website footer. Hraness desktop products have no
+menu bar; people reach them through the terminal with `<product> tui`,
+`<product> status --json` and `<product> doctor`. In the interactive
+`<product> tui`, show `supportHelpLine()` as a footer or print
+`supportPageUrl(profile)`, the Accounts page with both the updates and the
+support choices. The Rust crate exports `support_page_url(&profile)`. Keep
+support text out of `status --json`, `tui --json` and `doctor --json`, whose
+output stays the product's own. Keep web links visible without automatic
+modals. Newsletter signup and payment remain independent choices. Applications distributed
 through app stores must use their applicable purchasing rules.
 
 Future one-time payments need a separate product-owned payment flow. This

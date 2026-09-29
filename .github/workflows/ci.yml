@@ -9,8 +9,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # PR runs cancel superseded runs; every push to main keeps its own group.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -34,8 +35,17 @@ jobs:
       - run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
       - run: rustup default 1.97.1
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          # Pull requests restore the cache; only main saves it.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: bun run check
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
+      # Linux runs the full gate. macOS only reruns what depends on the host:
+      # the Rust/JS interop binary, Rust and JS FIFO/mode state, and Git email
+      # discovery.
+      - name: Rust and cross-runtime interoperability on macOS
+        if: runner.os == 'macOS'
+        run: cargo build --locked --example interop && cargo test --locked --test contract state_symlinks_fifo_and_private_modes_fail_closed && bun test tests/rust-interop.test.ts tests/node.test.ts tests/git-email.test.ts
       - name: Rust and cross-runtime interoperability on Windows
         if: runner.os == 'Windows'
         run: bun run typecheck && bun run check:rust-contract && bun run check:rust && bun test tests/rust-interop.test.ts

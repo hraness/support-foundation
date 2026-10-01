@@ -28,7 +28,7 @@ import { createSupportOffer } from "@hraness/support-foundation";
 
 const offer = createSupportOffer({
   id: "wrench",
-  name: "Ghostget",
+  name: "GhostGet",
   valueProposition: "Support ongoing development of precise web tools for agents.",
   updates: true,
 }, "web");
@@ -54,7 +54,7 @@ Import `runSupportCommand` and `maybeShowSupportInvitation` from
 `stdout`, `stderr`, and `exitCode` through the product's normal output adapter.
 Pass `{ command: ["ghostget"] }` (or the product's executable and fixed prefix
 arguments) to both adapters. These are argv elements, never shell text. The
-Accounts product ID cannot identify an executable: Ghostget uses `wrench` there.
+Accounts product ID cannot identify an executable: GhostGet uses `wrench` there.
 
 | Arguments after `support` | Behavior |
 | --- | --- |
@@ -83,9 +83,7 @@ adapter follows the shared Hraness audience rule:
 
 1. An explicit host `audience` option, then `HRANESS_AUDIENCE`
    (`human`, `agent`, `quiet` or `off`), then the older
-   `HRANESS_SUPPORT_AUDIENCE`. Steps 2 to 4 are `detectAudience` from
-   desktop-foundation 1.0, bundled into `dist` so installs need no extra
-   package.
+   `HRANESS_SUPPORT_AUDIENCE`.
 2. Any of the exact agent markers `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`,
    `CODEX_SANDBOX_NETWORK_DISABLED`, `CURSOR_AGENT` or `GEMINI_CLI` set to a
    nonempty value selects the agent.
@@ -122,8 +120,10 @@ Rust products use `support_help_line(&options)` and
 `support_advanced_help(&options)` with the same `Options`. Both apply the
 ASCII fallbacks. Keep support lines out of the bare-invocation start screen.
 
-`off`, `quiet` and unknown role values suppress incidental output and skill
-offer claims. Products that set `HRANESS_SUPPORT_AUDIENCE=off` for their own
+`off` and `quiet` suppress incidental output and skill offer claims. Invalid
+host `audience` or `HRANESS_SUPPORT_AUDIENCE` values also suppress them. An
+unrecognized `HRANESS_AUDIENCE` value falls back to the older setting or
+automatic detection. Products that set `HRANESS_SUPPORT_AUDIENCE=off` for their own
 child processes keep those children quiet; only an explicit host option
 overrides that. CI and `HRANESS_SUPPORT=off` always suppress incidental work.
 Explicit support and protocol requests remain available.
@@ -176,27 +176,17 @@ value proposition, clean links, and signup/payment handoff. Replace only its
 documented `{invitationId}` placeholder with a returned ID; never execute an
 argv array as shell text.
 
-Check for an offer once after completing useful work. Present it as one
-sentence, `Optional: {valueProposition}`, followed by the returned links, in a
-persistent message or card the person will see, then acknowledge with
-`shown <id>`. Temporary or collapsed progress commentary does not qualify. If
-the final answer is the only persistent surface and tools must precede it, put
-the invitation in that answer and leave its reservation unacknowledged. The
-reservation expires after ten minutes, so a later task may offer again; that
-fallback does not start the weekly cooldown. Release a canceled, unshown
-invitation once; do not reacquire it in the same task.
-
-This is guidance for cooperating product skills. A tool response cannot force
-an external agent to advertise or override its user. Respect a user's request
-to stop, never make task completion conditional on subscribing, and leave
-payment confirmation to the person. See [agent integration](docs/agents.md).
+The [agent integration guide](docs/agents.md) covers when to request an offer,
+how to present and acknowledge it, and how to handle uncertain output. Respect
+the person's preferences and leave payment confirmation to them. Completing a
+task never depends on subscribing.
 
 ## Cadence and privacy
 
 The default is one invitation after the first eligible useful result, then
 at most once every seven days after an acknowledged presentation across
 participating tools on the same device. Hosts unable to acknowledge persistent
-output use the ten-minute reservation fallback described above.
+output use the ten-minute reservation fallback in the agent integration guide.
 A short reservation prevents concurrent tools from making duplicate offers.
 Dismissal is persistent; later means a 30-day snooze. Explicit support requests
 remain available even after dismissal.
@@ -241,24 +231,15 @@ output stays the product's own. Keep web links visible without automatic
 modals. Newsletter signup and payment remain independent choices. Applications distributed
 through app stores must use their applicable purchasing rules.
 
-Future one-time payments need a separate product-owned payment flow. This
-release offers the existing suite membership; it does not advertise an
-unimplemented tip checkout or grant paid entitlements.
+Paid support links lead to the suite membership options in Accounts. Accounts
+controls the available plans and entitlements.
 
-## Verify
+## Development
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
 bun run check
 ```
 
-Install Rust 1.97.1 with its rustfmt and Clippy components for the development
-gate. Installed JavaScript consumers do not require a Rust toolchain.
-
-The gate checks TypeScript, Rust formatting/Clippy/tests, generated contract
-equality, JavaScript/Rust state interoperability, URL and state invariants, concurrent invitations,
-preferences and dedicated command behavior, then verifies the built package
-under Node, a detached strict TypeScript consumer with an augmented `NODE_ENV`,
-and its browser-safe root. Public type exports are generated declarations.
-These local tests make no provider calls
-and do not prove that a deployed Accounts route or Stripe configuration is live.
+See [Contributing](CONTRIBUTING.md) for the development toolchain and checks.
+Installed JavaScript consumers do not require a Rust toolchain.

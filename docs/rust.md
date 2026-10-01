@@ -7,11 +7,6 @@ success classification. No JavaScript runtime is required by an installed Rust
 consumer. The binding never opens a browser, makes a network request, signs up
 an address or confirms a payment.
 
-`scripts/rust-contract.ts` derives the committed Rust protocol text, schemas
-and cadence constants from the published JavaScript implementation. The release
-gate rejects drift and exercises both runtimes against the same temporary state
-directory, including concurrent claims and cross-runtime acknowledgements.
-
 The shared `state.lock` is a nonblocking create-new claim. Neither runtime
 steals stale locks. State and receipts remain bounded JSON, with atomic private
 temporary writes and the same receipt-before-state acknowledgement ordering.
@@ -45,7 +40,7 @@ Products without a mailing list set `updates: false` and never run this lookup.
 
 ## Platform and output boundaries
 
-Linux, macOS and Windows run the same interop gate. Unix state reads use
+The adapter supports Linux, macOS and Windows. Unix state reads use
 `O_NOFOLLOW | O_NONBLOCK`; Windows opens the reparse point itself and rejects
 reparse metadata. New Unix files use mode 0600 and directories 0700. Windows
 inherits the owning directory's ACL, matching the platform's normal Node file
@@ -58,7 +53,5 @@ that worker during exit. This is accepted-output accounting, not display or
 consent proof; it has the same uncertain-output reservation fallback as Node.
 Custom `Output` sinks must return success only after accepting the full text.
 
-The test-only `interop` example exchanges JSON with the Bun suite. It is never
-installed as a consumer executable. Release checks regenerate neither contract
-nor state: they verify the committed contract against JavaScript, then exercise
-both runtimes against disposable test-owned directories.
+For changes to the binding or protocol, see the
+[development checks](../CONTRIBUTING.md#protocol-and-package-checks).

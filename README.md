@@ -35,7 +35,17 @@ const offer = createSupportOffer({
 
 offer.actions;
 // Separate free-updates and optional-paid-support links to Accounts.
+console.log(offer.actions.map(({ kind, url }) => `${kind}  ${url}`).join("\n"));
 ```
+
+The example prints two actions with these destinations, without making a request:
+
+```text
+updates  https://account.hraness.com/support?product=wrench&source=web#updates
+support  https://account.hraness.com/support?product=wrench&source=web#support
+```
+
+Set `updates: false` to produce only the paid-support action. `createSupportOffer` throws `TypeError("Invalid support profile or source.")` for invalid input. When you read an untrusted profile, use `parseSupportProfile(value)` first and handle its `null` result before rendering. A profile has exactly `id`, `name`, `valueProposition`, and `updates`; extra keys are rejected.
 
 Use the exact public product ID accepted by Accounts. Set `updates: true` only
 when Accounts has an enabled public list for the product. Profile parsing

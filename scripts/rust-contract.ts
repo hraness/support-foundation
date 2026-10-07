@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import ts from "typescript";
+// TypeScript 7 is the build compiler; this contract parser uses the pinned legacy AST API.
+import ts from "typescript-legacy";
 import { AGENT_MARKERS } from "@hraness/desktop-foundation/audience";
 import { SUPPORT_ASCII_SYMBOLS, SUPPORT_HUMAN_COPY, createSupportOffer, createSupportProtocol, renderSupportOffer } from "../src/index.js";
 

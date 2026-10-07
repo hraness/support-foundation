@@ -26,6 +26,7 @@
     "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v1.0.0/hraness-desktop-foundation-1.0.0.tgz",
     "@types/bun": "1.3.14",
     "@types/node": "24.10.1",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2",
+    "typescript-legacy": "npm:typescript@6.0.3"
   }
 }
